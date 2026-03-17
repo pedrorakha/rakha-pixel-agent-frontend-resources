@@ -78,10 +78,24 @@ export function MusicPlayer() {
   const [loadedSongId, setLoadedSongId] = useState<string | null>(null);
   const [iframeSrc, setIframeSrc] = useState<string | null>(null);
 
+  const [audioUnlocked, setAudioUnlocked] = useState(false);
+
   const socketRef = useRef<Socket | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
 
   const currentSong = state.currentSong;
+
+  // Desbloqueia áudio no mobile — envia playVideo durante gesto do usuário
+  const unlockAudio = useCallback(() => {
+    if (audioUnlocked) return;
+    const iframe = iframeRef.current;
+    if (iframe?.contentWindow) {
+      iframe.contentWindow.postMessage(
+        JSON.stringify({ event: "command", func: "playVideo", args: [] }), "*"
+      );
+    }
+    setAudioUnlocked(true);
+  }, [audioUnlocked]);
 
   // -------------------------------------------------------------------------
   // Send volume to YouTube iframe
@@ -348,7 +362,7 @@ export function MusicPlayer() {
       {showToast && (
         <div className="fixed top-16 left-1/2 -translate-x-1/2 z-[60] animate-bounce">
           <button
-            onClick={() => { setShowToast(false); setExpanded(true); }}
+            onClick={() => { setShowToast(false); setExpanded(true); unlockAudio(); }}
             className="flex items-center gap-3 px-4 py-3 bg-pixel-surface border-4 border-pixel-accent shadow-[4px_4px_0px_0px_rgba(233,69,96,0.5)] hover:bg-pixel-accent/20 transition-colors cursor-pointer"
           >
             <span className="font-pixel text-[14px]">&#9835;</span>
@@ -368,28 +382,35 @@ export function MusicPlayer() {
         </div>
       )}
 
-      {/* Hidden iframe — always rendered, keeps music playing even minimized.
-          Mobile browsers block autoplay on truly hidden iframes (0px / opacity:0),
-          so we keep a small visible area off-screen instead. */}
+      {/* Hidden iframe — always rendered, keeps music playing even minimized */}
       {iframeSrc && (
         <iframe
           ref={iframeRef}
           src={iframeSrc}
-          width={200}
-          height={200}
-          allow="autoplay; encrypted-media; playsinline"
-          // @ts-expect-error — playsInline is a valid attribute for iframe on mobile
-          playsInline
+          width={1}
+          height={1}
+          allow="autoplay; encrypted-media"
           title="YouTube audio"
           onLoad={handleIframeLoad}
-          style={{ position: "fixed", top: -200, left: -200, width: 200, height: 200, pointerEvents: "none", zIndex: -1 }}
+          style={{ position: "fixed", top: 0, left: 0, width: 1, height: 1, opacity: 0, pointerEvents: "none", zIndex: -1 }}
         />
+      )}
+
+      {/* Mobile: tap to unlock audio (autoplay is blocked on mobile) */}
+      {!audioUnlocked && currentSong && iframeSrc && (
+        <button
+          onClick={unlockAudio}
+          className="fixed top-10 left-1/2 -translate-x-1/2 z-[70] flex items-center gap-2 px-5 py-2.5 bg-pixel-accent border-4 border-white/20 shadow-[0_0_20px_rgba(233,69,96,0.6)] animate-pulse cursor-pointer"
+        >
+          <span className="font-pixel text-[12px] text-white">&#9654;</span>
+          <span className="font-pixel text-[9px] text-white">TAP TO PLAY</span>
+        </button>
       )}
 
       {/* Minimized */}
       {!expanded && (
         <button
-          onClick={() => setExpanded(true)}
+          onClick={() => { setExpanded(true); unlockAudio(); }}
           className="fixed bottom-4 left-4 z-50 flex items-center gap-2 bg-pixel-surface border-2 border-pixel-panel hover:border-pixel-accent transition-colors cursor-pointer"
           style={{ maxWidth: 240 }}
         >
