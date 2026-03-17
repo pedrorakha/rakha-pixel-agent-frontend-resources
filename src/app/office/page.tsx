@@ -100,7 +100,7 @@ export default function OfficePage() {
 
   return (
     <PasswordGate area="office">
-    <div className="h-screen w-screen overflow-hidden bg-pixel-bg relative">
+    <div className="w-screen overflow-hidden bg-pixel-bg relative" style={{ height: "100dvh" }}>
       {/* Music player */}
       <MusicPlayer />
 

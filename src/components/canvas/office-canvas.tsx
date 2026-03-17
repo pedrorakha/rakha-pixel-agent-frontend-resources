@@ -394,8 +394,56 @@ export function OfficeCanvas() {
     [zoomIn, zoomOut]
   );
 
+  // Touch support for mobile (pan + pinch zoom)
+  const lastTouchRef = useRef<{ x: number; y: number } | null>(null);
+  const pinchDistRef = useRef<number | null>(null);
+
+  const handleTouchStart = useCallback(
+    (e: React.TouchEvent) => {
+      if (e.touches.length === 1) {
+        const t = e.touches[0];
+        lastTouchRef.current = { x: t.clientX, y: t.clientY };
+        startPan(t.clientX, t.clientY);
+      } else if (e.touches.length === 2) {
+        endPan();
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        pinchDistRef.current = Math.hypot(dx, dy);
+      }
+    },
+    [startPan, endPan]
+  );
+
+  const handleTouchMove = useCallback(
+    (e: React.TouchEvent) => {
+      e.preventDefault();
+      if (e.touches.length === 1 && lastTouchRef.current) {
+        const t = e.touches[0];
+        updatePan(t.clientX, t.clientY);
+        lastTouchRef.current = { x: t.clientX, y: t.clientY };
+      } else if (e.touches.length === 2 && pinchDistRef.current !== null) {
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        const dist = Math.hypot(dx, dy);
+        const diff = dist - pinchDistRef.current;
+        if (Math.abs(diff) > 30) {
+          if (diff > 0) zoomIn();
+          else zoomOut();
+          pinchDistRef.current = dist;
+        }
+      }
+    },
+    [updatePan, zoomIn, zoomOut]
+  );
+
+  const handleTouchEnd = useCallback(() => {
+    lastTouchRef.current = null;
+    pinchDistRef.current = null;
+    endPan();
+  }, [endPan]);
+
   return (
-    <div className="relative w-full h-full overflow-hidden bg-pixel-bg">
+    <div className="relative w-full h-full overflow-hidden bg-pixel-bg touch-none">
       <canvas
         ref={canvasRef}
         className="block cursor-grab active:cursor-grabbing"
@@ -404,6 +452,10 @@ export function OfficeCanvas() {
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
         onWheel={handleWheel}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchEnd}
       />
 
       {/* Zoom controls overlay */}

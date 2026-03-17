@@ -368,17 +368,21 @@ export function MusicPlayer() {
         </div>
       )}
 
-      {/* Hidden iframe — always rendered, keeps music playing even minimized */}
+      {/* Hidden iframe — always rendered, keeps music playing even minimized.
+          Mobile browsers block autoplay on truly hidden iframes (0px / opacity:0),
+          so we keep a small visible area off-screen instead. */}
       {iframeSrc && (
         <iframe
           ref={iframeRef}
           src={iframeSrc}
-          width={1}
-          height={1}
-          allow="autoplay; encrypted-media"
+          width={200}
+          height={200}
+          allow="autoplay; encrypted-media; playsinline"
+          // @ts-expect-error — playsInline is a valid attribute for iframe on mobile
+          playsInline
           title="YouTube audio"
           onLoad={handleIframeLoad}
-          style={{ position: "fixed", top: 0, left: 0, width: 1, height: 1, opacity: 0, pointerEvents: "none", zIndex: -1 }}
+          style={{ position: "fixed", top: -200, left: -200, width: 200, height: 200, pointerEvents: "none", zIndex: -1 }}
         />
       )}
 
