@@ -1,0 +1,69 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --pixel-bg: #1a1a2e;
+  --pixel-surface: #16213e;
+  --pixel-panel: #0f3460;
+  --pixel-accent: #e94560;
+  --pixel-text: #eaeaea;
+  --pixel-muted: #7f8c8d;
+}
+
+* {
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
+}
+
+body {
+  background-color: var(--pixel-bg);
+  color: var(--pixel-text);
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--pixel-bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--pixel-panel);
+  border: 1px solid var(--pixel-surface);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--pixel-accent);
+}
+
+/* Pixel art canvas rendering */
+canvas {
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
+}
+
+/* Pixel font smoothing override */
+.font-pixel {
+  -webkit-font-smoothing: none;
+  -moz-osx-font-smoothing: unset;
+  font-smooth: never;
+}
+
+@layer utilities {
+  .pixel-border {
+    border-style: solid;
+    border-width: 2px;
+    border-color: var(--pixel-panel);
+    box-shadow: 2px 2px 0px 0px rgba(15, 52, 96, 0.4);
+  }
+
+  .pixel-shadow {
+    box-shadow: 4px 4px 0px 0px rgba(0, 0, 0, 0.3);
+  }
+}
