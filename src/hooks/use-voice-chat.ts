@@ -5,6 +5,32 @@ import DailyIframe, { DailyCall, DailyParticipant } from "@daily-co/daily-js";
 import { ROOMS } from "@/lib/constants";
 import { api } from "@/lib/api";
 
+// Som de notificacao via Web Audio API (sem arquivo externo)
+function playJoinSound() {
+  try {
+    const audioCtx = new AudioContext();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+
+    // Beep duplo estilo pixel
+    osc.type = "square";
+    osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+    osc.frequency.setValueAtTime(1100, audioCtx.currentTime + 0.08);
+    gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+
+    osc.start(audioCtx.currentTime);
+    osc.stop(audioCtx.currentTime + 0.2);
+
+    // Limpa contexto apos terminar
+    setTimeout(() => audioCtx.close(), 300);
+  } catch {
+    // Ignora se AudioContext nao disponivel
+  }
+}
+
 interface VoiceJoinResponse {
   url: string;
   token: string;
@@ -138,9 +164,10 @@ export function useVoiceChat({ playerName, gridX, gridY, enabled, playersInSameR
           updateParticipantCount();
 
           const participants = call.participants();
-          Object.values(participants).forEach((p) => {
-            if (!p.local) playRemoteAudio(p);
-          });
+          const remotes = Object.values(participants).filter((p) => !p.local);
+          remotes.forEach((p) => playRemoteAudio(p));
+          // Som ao entrar na call (se ja tem outros participantes)
+          if (remotes.length > 0) playJoinSound();
         });
 
         call.on("left-meeting", () => {
@@ -153,6 +180,7 @@ export function useVoiceChat({ playerName, gridX, gridY, enabled, playersInSameR
           updateParticipantCount();
           if (event?.participant) {
             playRemoteAudio(event.participant);
+            playJoinSound();
           }
         });
 
