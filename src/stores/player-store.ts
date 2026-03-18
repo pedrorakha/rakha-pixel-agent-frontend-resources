@@ -4,17 +4,24 @@ import { create } from "zustand";
 
 const STORAGE_KEY = "rakha-selected-member";
 
+type EmitVisualFn = (visual: {
+  hat: string; glasses: string; hairStyle: string;
+  colorShirt: string; colorHair: string; colorSkin: string;
+}) => void;
+
 interface PlayerState {
   selectedMemberId: string | null;
   selectedMemberName: string | null;
   isSelectingMember: boolean;
   isSpectator: boolean;
+  emitVisualFn: EmitVisualFn | null;
 
   setSelectedMember: (id: string, name: string) => void;
   clearSelectedMember: () => void;
   setIsSelectingMember: (value: boolean) => void;
   enterSpectatorMode: () => void;
   loadFromStorage: () => void;
+  setEmitVisualFn: (fn: EmitVisualFn) => void;
 }
 
 export const usePlayerStore = create<PlayerState>((set) => ({
@@ -22,6 +29,7 @@ export const usePlayerStore = create<PlayerState>((set) => ({
   selectedMemberName: null,
   isSelectingMember: false,
   isSpectator: false,
+  emitVisualFn: null,
 
   setSelectedMember: (id, name) => {
     localStorage.setItem(
@@ -56,6 +64,8 @@ export const usePlayerStore = create<PlayerState>((set) => ({
       isSpectator: true,
     });
   },
+
+  setEmitVisualFn: (fn) => set({ emitVisualFn: fn }),
 
   loadFromStorage: () => {
     const stored = localStorage.getItem(STORAGE_KEY);

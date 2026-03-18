@@ -325,8 +325,19 @@ export default function OfficePage() {
               initialColorHair={currentMember.colorHair}
               initialColorSkin={currentMember.colorSkin}
               onClose={() => setShowVisualEditor(false)}
-              onSave={(_data: VisualData) => {
-                // Recarrega dados para atualizar sidebar e canvas
+              onSave={(data: VisualData) => {
+                // Emite visual via multiplayer para todos
+                const emitFn = usePlayerStore.getState().emitVisualFn;
+                if (emitFn) {
+                  emitFn({
+                    hat: data.accessory_hat,
+                    glasses: data.accessory_glasses,
+                    hairStyle: data.hair_style,
+                    colorShirt: data.color_shirt,
+                    colorHair: data.color_hair,
+                    colorSkin: data.color_skin,
+                  });
+                }
                 fetchData();
               }}
             />

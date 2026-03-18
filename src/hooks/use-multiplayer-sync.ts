@@ -33,6 +33,16 @@ export interface PlayerReactionPayload {
   timestamp: number;
 }
 
+export interface PlayerVisualPayload {
+  memberId: string;
+  hat: string;
+  glasses: string;
+  hairStyle: string;
+  colorShirt: string;
+  colorHair: string;
+  colorSkin: string;
+}
+
 export interface ChatMessagePayload {
   id: string;
   memberId: string;
@@ -58,6 +68,7 @@ interface UseMultiplayerSyncOptions {
   onChatMessage: (payload: ChatMessagePayload) => void;
   onPlayerLeave: (payload: PlayerLeavePayload) => void;
   onReaction: (payload: PlayerReactionPayload) => void;
+  onVisualUpdate: (payload: PlayerVisualPayload) => void;
   onRemoteJoin?: (memberId: string) => void;
 }
 
@@ -69,6 +80,7 @@ export function useMultiplayerSync({
   onChatMessage,
   onPlayerLeave,
   onReaction,
+  onVisualUpdate,
   onRemoteJoin,
 }: UseMultiplayerSyncOptions) {
   const socketRef = useRef<Socket | null>(null);
@@ -85,6 +97,7 @@ export function useMultiplayerSync({
   const onChatMessageRef = useRef(onChatMessage);
   const onPlayerLeaveRef = useRef(onPlayerLeave);
   const onReactionRef = useRef(onReaction);
+  const onVisualUpdateRef = useRef(onVisualUpdate);
   const onRemoteJoinRef = useRef(onRemoteJoin);
 
   onRemoteMoveRef.current = onRemoteMove;
@@ -92,6 +105,7 @@ export function useMultiplayerSync({
   onChatMessageRef.current = onChatMessage;
   onPlayerLeaveRef.current = onPlayerLeave;
   onReactionRef.current = onReaction;
+  onVisualUpdateRef.current = onVisualUpdate;
   onRemoteJoinRef.current = onRemoteJoin;
 
   // So conecta quando tiver playerId
@@ -159,6 +173,10 @@ export function useMultiplayerSync({
 
     socket.on("player:reaction", (data: PlayerReactionPayload) => {
       onReactionRef.current(data);
+    });
+
+    socket.on("player:visual", (data: PlayerVisualPayload) => {
+      onVisualUpdateRef.current(data);
     });
 
     socket.on("player:leave", (data: PlayerLeavePayload) => {
@@ -243,5 +261,18 @@ export function useMultiplayerSync({
     []
   );
 
-  return { emitMove, emitJump, emitChat, emitReaction, onlinePlayers };
+  const emitVisual = useCallback(
+    (visual: Omit<PlayerVisualPayload, "memberId">) => {
+      const pid = playerIdRef.current;
+      if (!socketRef.current?.connected || !pid) return;
+
+      socketRef.current.emit("player:visual", {
+        memberId: pid,
+        ...visual,
+      });
+    },
+    []
+  );
+
+  return { emitMove, emitJump, emitChat, emitReaction, emitVisual, onlinePlayers };
 }

@@ -18,6 +18,7 @@ import {
   PlayerLeavePayload,
   ChatMessagePayload,
   PlayerReactionPayload,
+  PlayerVisualPayload,
 } from "@/hooks/use-multiplayer-sync";
 import { Renderer, updateCharacterAnimations } from "@/engine/renderer";
 import { Tilemap } from "@/engine/tilemap";
@@ -218,6 +219,26 @@ export function OfficeCanvas() {
     [addReaction]
   );
 
+  const handleVisualUpdate = useCallback(
+    (payload: PlayerVisualPayload) => {
+      setCharacters((prev) =>
+        prev.map((char) => {
+          if (char.id !== payload.memberId) return char;
+          return {
+            ...char,
+            hat: payload.hat as Character["hat"],
+            glasses: payload.glasses as Character["glasses"],
+            hairStyle: payload.hairStyle as Character["hairStyle"],
+            colorShirt: payload.colorShirt,
+            colorHair: payload.colorHair,
+            colorSkin: payload.colorSkin,
+          };
+        })
+      );
+    },
+    []
+  );
+
   // Jogador saiu — retorna personagem a posicao baseada no Discord status
   const presenceMapRef = useRef(presenceMap);
   presenceMapRef.current = presenceMap;
@@ -298,7 +319,7 @@ export function OfficeCanvas() {
     }
   }, []);
 
-  const { emitMove, emitJump, emitChat, emitReaction, onlinePlayers } = useMultiplayerSync({
+  const { emitMove, emitJump, emitChat, emitReaction, emitVisual, onlinePlayers } = useMultiplayerSync({
     playerId: selectedMemberId,
     getPlayerPosition,
     onRemoteMove: handleRemoteMove,
@@ -306,8 +327,15 @@ export function OfficeCanvas() {
     onChatMessage: handleChatMessage,
     onPlayerLeave: handlePlayerLeave,
     onReaction: handleReaction,
+    onVisualUpdate: handleVisualUpdate,
     onRemoteJoin: handleRemoteJoin,
   });
+
+  // Registra emitVisual no store para uso externo (VisualEditor)
+  const setEmitVisualFn = usePlayerStore((s) => s.setEmitVisualFn);
+  useEffect(() => {
+    setEmitVisualFn(emitVisual);
+  }, [emitVisual, setEmitVisualFn]);
 
   // Voice chat — so conecta quando 2+ jogadores no mesmo quarto
   const currentPlayerChar = characters.find((c) => c.id === selectedMemberId);
