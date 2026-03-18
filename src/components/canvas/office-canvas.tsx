@@ -147,6 +147,8 @@ export function OfficeCanvas() {
   const chatFocusedRef = useRef(chatFocused);
   chatFocusedRef.current = chatFocused;
 
+  const refetchDataRef = useRef<() => void>(() => {});
+
   // Track jump velocity per character
   const jumpVelocitiesRef = useRef<Map<string, number>>(new Map());
 
@@ -288,6 +290,14 @@ export function OfficeCanvas() {
     return { gridX: char.gridX, gridY: char.gridY, direction: char.direction, state: char.state };
   }, []);
 
+  const handleRemoteJoin = useCallback((memberId: string) => {
+    // Se o membro que entrou nao esta na nossa lista, refetch
+    const known = charactersRef.current.some((c) => c.id === memberId);
+    if (!known) {
+      refetchDataRef.current();
+    }
+  }, []);
+
   const { emitMove, emitJump, emitChat, emitReaction, onlinePlayers } = useMultiplayerSync({
     playerId: selectedMemberId,
     getPlayerPosition,
@@ -296,6 +306,7 @@ export function OfficeCanvas() {
     onChatMessage: handleChatMessage,
     onPlayerLeave: handlePlayerLeave,
     onReaction: handleReaction,
+    onRemoteJoin: handleRemoteJoin,
   });
 
   // Voice chat — so conecta quando 2+ jogadores no mesmo quarto
@@ -594,6 +605,7 @@ export function OfficeCanvas() {
     }
 
     fetchData();
+    refetchDataRef.current = fetchData;
     return () => { cancelled = true; };
   }, [setDesks]);
 

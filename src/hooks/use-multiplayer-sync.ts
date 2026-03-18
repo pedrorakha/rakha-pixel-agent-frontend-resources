@@ -58,6 +58,7 @@ interface UseMultiplayerSyncOptions {
   onChatMessage: (payload: ChatMessagePayload) => void;
   onPlayerLeave: (payload: PlayerLeavePayload) => void;
   onReaction: (payload: PlayerReactionPayload) => void;
+  onRemoteJoin?: (memberId: string) => void;
 }
 
 export function useMultiplayerSync({
@@ -68,6 +69,7 @@ export function useMultiplayerSync({
   onChatMessage,
   onPlayerLeave,
   onReaction,
+  onRemoteJoin,
 }: UseMultiplayerSyncOptions) {
   const socketRef = useRef<Socket | null>(null);
   const lastMoveRef = useRef<number>(0);
@@ -83,12 +85,14 @@ export function useMultiplayerSync({
   const onChatMessageRef = useRef(onChatMessage);
   const onPlayerLeaveRef = useRef(onPlayerLeave);
   const onReactionRef = useRef(onReaction);
+  const onRemoteJoinRef = useRef(onRemoteJoin);
 
   onRemoteMoveRef.current = onRemoteMove;
   onRemoteJumpRef.current = onRemoteJump;
   onChatMessageRef.current = onChatMessage;
   onPlayerLeaveRef.current = onPlayerLeave;
   onReactionRef.current = onReaction;
+  onRemoteJoinRef.current = onRemoteJoin;
 
   // So conecta quando tiver playerId
   useEffect(() => {
@@ -115,6 +119,9 @@ export function useMultiplayerSync({
         next.add(data.memberId);
         return next;
       });
+      if (data.memberId !== playerId) {
+        onRemoteJoinRef.current?.(data.memberId);
+      }
     });
 
     // Sync inicial — recebe posicoes de todos os jogadores ativos
