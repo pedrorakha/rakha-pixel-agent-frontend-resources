@@ -7,7 +7,6 @@ import { Character } from "@/types/character";
 const WEBSOCKET_URL =
   process.env.NEXT_PUBLIC_WEBSOCKET_URL ?? "http://localhost:3001";
 
-// Throttle — envia no maximo 1 update de posicao a cada THROTTLE_MS
 const MOVE_THROTTLE_MS = 80;
 
 export interface PlayerMovePayload {
@@ -55,11 +54,14 @@ export function useMultiplayerSync({
 }: UseMultiplayerSyncOptions) {
   const socketRef = useRef<Socket | null>(null);
   const lastMoveRef = useRef<number>(0);
+  const playerIdRef = useRef(playerId);
+  playerIdRef.current = playerId;
+
   const [onlinePlayers, setOnlinePlayers] = useState<Set<string>>(new Set());
+
   const onRemoteMoveRef = useRef(onRemoteMove);
   const onRemoteJumpRef = useRef(onRemoteJump);
   const onChatMessageRef = useRef(onChatMessage);
-
   const onPlayerLeaveRef = useRef(onPlayerLeave);
 
   onRemoteMoveRef.current = onRemoteMove;
@@ -67,7 +69,10 @@ export function useMultiplayerSync({
   onChatMessageRef.current = onChatMessage;
   onPlayerLeaveRef.current = onPlayerLeave;
 
+  // So conecta quando tiver playerId
   useEffect(() => {
+    if (!playerId) return;
+
     const socket = io(`${WEBSOCKET_URL}/movement`, {
       transports: ["websocket"],
       reconnection: true,
@@ -76,12 +81,9 @@ export function useMultiplayerSync({
     });
 
     socket.on("connect", () => {
-      if (playerId) {
-        socket.emit("player:join", { memberId: playerId });
-      }
+      socket.emit("player:join", { memberId: playerId });
     });
 
-    // Outro jogador entrou
     socket.on("player:join", (data: { memberId: string }) => {
       setOnlinePlayers((prev) => {
         const next = new Set(prev);
@@ -90,7 +92,6 @@ export function useMultiplayerSync({
       });
     });
 
-    // Movimentos de outros jogadores (tambem marca como online)
     socket.on("player:move", (data: PlayerMovePayload) => {
       setOnlinePlayers((prev) => {
         if (prev.has(data.memberId)) return prev;
@@ -102,18 +103,15 @@ export function useMultiplayerSync({
       onRemoteMoveRef.current(data);
     });
 
-    // Pulos de outros jogadores
     socket.on("player:jump", (data: PlayerJumpPayload) => {
       if (data.memberId === playerId) return;
       onRemoteJumpRef.current(data);
     });
 
-    // Mensagens de chat (de todos, incluindo nosso proprio para confirmacao)
     socket.on("chat:message", (data: ChatMessagePayload) => {
       onChatMessageRef.current(data);
     });
 
-    // Jogador saiu — retorna personagem a posicao baseada no Discord
     socket.on("player:leave", (data: PlayerLeavePayload) => {
       setOnlinePlayers((prev) => {
         const next = new Set(prev);
@@ -132,55 +130,55 @@ export function useMultiplayerSync({
     };
   }, [playerId]);
 
-  // Emite movimento local com throttle
   const emitMove = useCallback(
     (gridX: number, gridY: number, direction: Character["direction"], state: Character["state"]) => {
-      if (!socketRef.current?.connected || !playerId) return;
+      const pid = playerIdRef.current;
+      if (!socketRef.current?.connected || !pid) return;
 
       const now = Date.now();
       if (now - lastMoveRef.current < MOVE_THROTTLE_MS) return;
       lastMoveRef.current = now;
 
       socketRef.current.emit("player:move", {
-        memberId: playerId,
+        memberId: pid,
         gridX,
         gridY,
         direction,
         state,
-      } satisfies PlayerMovePayload);
+      });
     },
-    [playerId]
+    []
   );
 
-  // Emite pulo
   const emitJump = useCallback(
     (gridX: number, gridY: number) => {
-      if (!socketRef.current?.connected || !playerId) return;
+      const pid = playerIdRef.current;
+      if (!socketRef.current?.connected || !pid) return;
 
       socketRef.current.emit("player:jump", {
-        memberId: playerId,
+        memberId: pid,
         gridX,
         gridY,
-      } satisfies PlayerJumpPayload);
+      });
     },
-    [playerId]
+    []
   );
 
-  // Emite mensagem de chat
   const emitChat = useCallback(
     (memberName: string, message: string, gridX: number, gridY: number) => {
-      if (!socketRef.current?.connected || !playerId) return;
+      const pid = playerIdRef.current;
+      if (!socketRef.current?.connected || !pid) return;
       if (!message.trim()) return;
 
       socketRef.current.emit("chat:message", {
-        memberId: playerId,
+        memberId: pid,
         memberName,
         message: message.trim().slice(0, 200),
         gridX,
         gridY,
       });
     },
-    [playerId]
+    []
   );
 
   return { emitMove, emitJump, emitChat, onlinePlayers };
