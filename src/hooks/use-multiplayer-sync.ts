@@ -92,6 +92,19 @@ export function useMultiplayerSync({
       });
     });
 
+    // Sync inicial — recebe posicoes de todos os jogadores ativos
+    socket.on("player:sync", (positions: PlayerMovePayload[]) => {
+      for (const pos of positions) {
+        setOnlinePlayers((prev) => {
+          if (prev.has(pos.memberId)) return prev;
+          const next = new Set(prev);
+          next.add(pos.memberId);
+          return next;
+        });
+        onRemoteMoveRef.current(pos);
+      }
+    });
+
     socket.on("player:move", (data: PlayerMovePayload) => {
       setOnlinePlayers((prev) => {
         if (prev.has(data.memberId)) return prev;

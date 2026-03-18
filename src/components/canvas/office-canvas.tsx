@@ -8,6 +8,7 @@ import { useDiscordStore } from "@/stores/discord-store";
 import { usePlayerStore } from "@/stores/player-store";
 import { useChatStore } from "@/stores/chat-store";
 import { usePlayerMovement } from "@/hooks/use-player-movement";
+import { useVoiceChat } from "@/hooks/use-voice-chat";
 import {
   useMultiplayerSync,
   PlayerMovePayload,
@@ -114,6 +115,23 @@ export function OfficeCanvas() {
   const [chatFocused, setChatFocused] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [charMenu, setCharMenu] = useState<{ screenX: number; screenY: number } | null>(null);
+
+  // Voice chat — detecta room pela posicao do jogador
+  const currentPlayerChar = characters.find((c) => c.id === selectedMemberId);
+  const {
+    isInCall,
+    isJoining: voiceJoining,
+    isMuted,
+    participantCount,
+    roomLabel: voiceRoomLabel,
+    toggleMute,
+  } = useVoiceChat({
+    playerName: selectedMemberName,
+    gridX: currentPlayerChar?.gridX ?? -1,
+    gridY: currentPlayerChar?.gridY ?? -1,
+    enabled: !!selectedMemberId,
+  });
+
   const chatInputRef = useRef<HTMLInputElement>(null);
   const historyEndRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<Renderer | null>(null);
@@ -189,14 +207,19 @@ export function OfficeCanvas() {
   );
 
   // Jogador saiu — retorna personagem a posicao baseada no Discord status
+  const presenceMapRef = useRef(presenceMap);
+  presenceMapRef.current = presenceMap;
+
   const handlePlayerLeave = useCallback(
     (payload: PlayerLeavePayload) => {
       setCharacters((prev) =>
         prev.map((char) => {
           if (char.id !== payload.memberId) return char;
 
-          const presence = presences.get(char.discordId);
-          const status = presence?.status ?? "offline";
+          // Busca status real: primeiro do Discord WebSocket, depois do mapa da API
+          const wsPresence = presences.get(char.discordId);
+          const apiStatus = presenceMapRef.current.get(char.discordId);
+          const status = wsPresence?.status ?? apiStatus ?? "offline";
           const newState = STATUS_TO_STATE[status];
 
           let newX = char.gridX;
@@ -913,12 +936,41 @@ export function OfficeCanvas() {
         </button>
       </div>
 
-      {/* Connection status */}
-      <div className="absolute top-14 left-6 z-20">
+      {/* Connection status + Voice */}
+      <div className="absolute top-14 left-6 z-20 flex flex-col gap-2">
         <div className="flex items-center gap-2 bg-pixel-surface/80 border-2 border-pixel-panel px-4 py-1.5">
           <span className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pixel-blink" />
           <span className="font-pixel text-[10px] text-pixel-muted">LIVE</span>
         </div>
+
+        {/* Voice chat indicator */}
+        {(isInCall || voiceJoining) && (
+          <div className="flex items-center gap-2 bg-pixel-surface/90 border-2 border-pixel-panel px-4 py-1.5">
+            <span className={`w-2.5 h-2.5 rounded-full ${voiceJoining ? "bg-yellow-500 animate-pulse" : "bg-green-500"}`} />
+            <span className="font-pixel text-[9px] text-pixel-muted">
+              {voiceJoining ? "CONNECTING..." : `VOICE: ${voiceRoomLabel}`}
+            </span>
+            {isInCall && participantCount > 1 && (
+              <span className="font-pixel text-[8px] text-pixel-accent">
+                ({participantCount})
+              </span>
+            )}
+          </div>
+        )}
+        {isInCall && (
+          <button
+            onClick={toggleMute}
+            className={`flex items-center gap-2 px-4 py-1.5 border-2 transition-colors ${
+              isMuted
+                ? "bg-red-900/50 border-red-600/50 hover:border-red-500"
+                : "bg-pixel-surface/90 border-pixel-panel hover:border-pixel-accent"
+            }`}
+          >
+            <span className="font-pixel text-[9px] text-pixel-text">
+              {isMuted ? "MIC OFF" : "MIC ON"}
+            </span>
+          </button>
+        )}
       </div>
 
       {/* Chat input — centro horizontal */}
