@@ -229,6 +229,22 @@ export default function OfficePage() {
                   ))}
                 </div>
 
+                {/* Trocar personagem */}
+                {selectedMemberName && (
+                  <div className="px-4 py-3 border-t-2 border-pixel-panel shrink-0">
+                    <p className="font-pixel text-[8px] text-pixel-muted mb-2">Logado como:</p>
+                    <div className="flex items-center justify-between">
+                      <span className="font-pixel text-[10px] text-pixel-accent">{selectedMemberName}</span>
+                      <button
+                        onClick={clearSelectedMember}
+                        className="font-pixel text-[9px] text-pixel-muted hover:text-pixel-accent transition-colors border-2 border-pixel-panel hover:border-pixel-accent px-3 py-1.5"
+                      >
+                        TROCAR
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {/* Legend */}
                 <div className="px-4 py-4 border-t-2 border-pixel-panel shrink-0">
                   <h3 className="font-pixel text-[9px] sm:text-[10px] text-pixel-muted mb-2 uppercase">

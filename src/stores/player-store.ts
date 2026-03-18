@@ -37,6 +37,7 @@ export const usePlayerStore = create<PlayerState>((set) => ({
     set({
       selectedMemberId: null,
       selectedMemberName: null,
+      isSelectingMember: true,
     });
   },
 
