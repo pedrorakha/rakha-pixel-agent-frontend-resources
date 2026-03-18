@@ -34,20 +34,18 @@ interface UseVoiceChatOptions {
 
 export function useVoiceChat({ playerName, gridX, gridY, enabled }: UseVoiceChatOptions) {
   const callRef = useRef<DailyCall | null>(null);
+  const audioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
   const [currentRoom, setCurrentRoom] = useState(-1);
   const [isMuted, setIsMuted] = useState(false);
   const [isInCall, setIsInCall] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
   const [participantCount, setParticipantCount] = useState(0);
-  const [speakingIds, setSpeakingIds] = useState<Set<string>>(new Set());
 
   const currentRoomRef = useRef(currentRoom);
   currentRoomRef.current = currentRoom;
 
-  // Detecta mudanca de room
   const detectedRoom = enabled ? detectRoom(gridX, gridY) : -1;
 
-  // Atualiza contagem de participantes
   const updateParticipantCount = useCallback(() => {
     if (!callRef.current) {
       setParticipantCount(0);
@@ -57,7 +55,48 @@ export function useVoiceChat({ playerName, gridX, gridY, enabled }: UseVoiceChat
     setParticipantCount(Object.keys(participants).length);
   }, []);
 
-  // Sai da call atual
+  // Reproduz audio de um participante remoto via <audio> element
+  const playRemoteAudio = useCallback((participant: DailyParticipant) => {
+    if (participant.local) return;
+    const sessionId = participant.session_id;
+
+    const audioTrack = participant.tracks?.audio;
+    if (audioTrack?.state === "playable" && audioTrack.persistentTrack) {
+      // Ja tem element? Atualiza a track
+      let el = audioElementsRef.current.get(sessionId);
+      if (!el) {
+        el = document.createElement("audio");
+        el.autoplay = true;
+        (el as unknown as Record<string, boolean>).playsInline = true;
+        audioElementsRef.current.set(sessionId, el);
+      }
+      const stream = new MediaStream([audioTrack.persistentTrack]);
+      el.srcObject = stream;
+      el.play().catch(() => {
+        // Autoplay bloqueado — tenta novamente em interacao do usuario
+      });
+    }
+  }, []);
+
+  // Remove audio element de um participante
+  const removeRemoteAudio = useCallback((sessionId: string) => {
+    const el = audioElementsRef.current.get(sessionId);
+    if (el) {
+      el.srcObject = null;
+      el.remove();
+      audioElementsRef.current.delete(sessionId);
+    }
+  }, []);
+
+  // Limpa todos os audio elements
+  const cleanupAudioElements = useCallback(() => {
+    audioElementsRef.current.forEach((el) => {
+      el.srcObject = null;
+      el.remove();
+    });
+    audioElementsRef.current.clear();
+  }, []);
+
   const leaveCall = useCallback(async () => {
     if (callRef.current) {
       try {
@@ -68,13 +107,12 @@ export function useVoiceChat({ playerName, gridX, gridY, enabled }: UseVoiceChat
       }
       callRef.current = null;
     }
+    cleanupAudioElements();
     setIsInCall(false);
     setParticipantCount(0);
-    setSpeakingIds(new Set());
     setCurrentRoom(-1);
-  }, []);
+  }, [cleanupAudioElements]);
 
-  // Entra na call de uma room
   const joinCall = useCallback(
     async (roomIndex: number) => {
       if (!playerName || isJoining) return;
@@ -82,68 +120,66 @@ export function useVoiceChat({ playerName, gridX, gridY, enabled }: UseVoiceChat
       setIsJoining(true);
 
       try {
-        // Sai da call anterior se tiver
         if (callRef.current) {
           await leaveCall();
         }
 
-        // Busca token do backend
         const data = await api.get<VoiceJoinResponse>(
           `/voice/join?roomIndex=${roomIndex}&userName=${encodeURIComponent(playerName)}`
         );
 
-        // Cria instancia Daily
         const call = DailyIframe.createCallObject({
           audioSource: true,
           videoSource: false,
+          subscribeToTracksAutomatically: true,
         });
 
-        // Listeners
         call.on("joined-meeting", () => {
           setIsInCall(true);
           setCurrentRoom(roomIndex);
           updateParticipantCount();
+
+          // Reproduz audio de participantes que ja estao na call
+          const participants = call.participants();
+          Object.values(participants).forEach((p) => {
+            if (!p.local) playRemoteAudio(p);
+          });
         });
 
         call.on("left-meeting", () => {
           setIsInCall(false);
           setParticipantCount(0);
-          setSpeakingIds(new Set());
+          cleanupAudioElements();
         });
 
-        call.on("participant-joined", () => updateParticipantCount());
-        call.on("participant-left", () => updateParticipantCount());
+        call.on("participant-joined", (event) => {
+          updateParticipantCount();
+          if (event?.participant) {
+            playRemoteAudio(event.participant);
+          }
+        });
+
         call.on("participant-updated", (event) => {
           updateParticipantCount();
           if (event?.participant) {
-            const p = event.participant as DailyParticipant;
-            const name = p.user_name || "";
-            setSpeakingIds((prev) => {
-              // Daily nao tem "is_speaking" direto, mas podemos checar tracks
-              // Por enquanto, mostra todos que estao com audio ativo
-              if (p.tracks?.audio?.state === "playable" && !p.local) {
-                if (prev.has(name)) return prev;
-                const next = new Set(prev);
-                next.add(name);
-                return next;
-              }
-              if (prev.has(name)) {
-                const next = new Set(prev);
-                next.delete(name);
-                return next;
-              }
-              return prev;
-            });
+            playRemoteAudio(event.participant);
+          }
+        });
+
+        call.on("participant-left", (event) => {
+          updateParticipantCount();
+          if (event?.participant) {
+            removeRemoteAudio(event.participant.session_id);
           }
         });
 
         call.on("error", () => {
           setIsInCall(false);
+          cleanupAudioElements();
         });
 
         callRef.current = call;
 
-        // Entra na call
         await call.join({ url: data.url, token: data.token });
       } catch (err) {
         console.error("Failed to join voice room:", err);
@@ -151,10 +187,9 @@ export function useVoiceChat({ playerName, gridX, gridY, enabled }: UseVoiceChat
         setIsJoining(false);
       }
     },
-    [playerName, isJoining, leaveCall, updateParticipantCount]
+    [playerName, isJoining, leaveCall, updateParticipantCount, playRemoteAudio, removeRemoteAudio, cleanupAudioElements]
   );
 
-  // Toggle mute
   const toggleMute = useCallback(() => {
     if (!callRef.current) return;
     const newMuted = !isMuted;
@@ -167,10 +202,8 @@ export function useVoiceChat({ playerName, gridX, gridY, enabled }: UseVoiceChat
     if (detectedRoom === currentRoomRef.current) return;
 
     if (detectedRoom === -1) {
-      // Saiu de todas as rooms
       leaveCall();
     } else {
-      // Entrou em uma room
       joinCall(detectedRoom);
     }
   }, [detectedRoom, joinCall, leaveCall]);
@@ -183,8 +216,9 @@ export function useVoiceChat({ playerName, gridX, gridY, enabled }: UseVoiceChat
         callRef.current.destroy();
         callRef.current = null;
       }
+      cleanupAudioElements();
     };
-  }, []);
+  }, [cleanupAudioElements]);
 
   return {
     isInCall,
@@ -192,7 +226,6 @@ export function useVoiceChat({ playerName, gridX, gridY, enabled }: UseVoiceChat
     isMuted,
     currentRoom,
     participantCount,
-    speakingIds,
     toggleMute,
     leaveCall,
     roomLabel: currentRoom >= 0 ? ROOMS[currentRoom].label : null,

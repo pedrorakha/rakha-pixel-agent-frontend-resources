@@ -37,8 +37,16 @@ export interface ChatMessagePayload {
   timestamp: number;
 }
 
+interface PlayerPosition {
+  gridX: number;
+  gridY: number;
+  direction: string;
+  state: string;
+}
+
 interface UseMultiplayerSyncOptions {
   playerId: string | null;
+  getPlayerPosition: () => PlayerPosition | null;
   onRemoteMove: (payload: PlayerMovePayload) => void;
   onRemoteJump: (payload: PlayerJumpPayload) => void;
   onChatMessage: (payload: ChatMessagePayload) => void;
@@ -47,6 +55,7 @@ interface UseMultiplayerSyncOptions {
 
 export function useMultiplayerSync({
   playerId,
+  getPlayerPosition,
   onRemoteMove,
   onRemoteJump,
   onChatMessage,
@@ -56,6 +65,8 @@ export function useMultiplayerSync({
   const lastMoveRef = useRef<number>(0);
   const playerIdRef = useRef(playerId);
   playerIdRef.current = playerId;
+  const getPlayerPositionRef = useRef(getPlayerPosition);
+  getPlayerPositionRef.current = getPlayerPosition;
 
   const [onlinePlayers, setOnlinePlayers] = useState<Set<string>>(new Set());
 
@@ -81,7 +92,11 @@ export function useMultiplayerSync({
     });
 
     socket.on("connect", () => {
-      socket.emit("player:join", { memberId: playerId });
+      const pos = getPlayerPositionRef.current();
+      socket.emit("player:join", {
+        memberId: playerId,
+        ...(pos ? { gridX: pos.gridX, gridY: pos.gridY, direction: pos.direction, state: pos.state } : {}),
+      });
     });
 
     socket.on("player:join", (data: { memberId: string }) => {

@@ -272,8 +272,15 @@ export function OfficeCanvas() {
     [presences, storeDesks]
   );
 
+  const getPlayerPosition = useCallback(() => {
+    const char = charactersRef.current.find((c) => c.id === selectedMemberIdRef.current);
+    if (!char) return null;
+    return { gridX: char.gridX, gridY: char.gridY, direction: char.direction, state: char.state };
+  }, []);
+
   const { emitMove, emitJump, emitChat, onlinePlayers } = useMultiplayerSync({
     playerId: selectedMemberId,
+    getPlayerPosition,
     onRemoteMove: handleRemoteMove,
     onRemoteJump: handleRemoteJump,
     onChatMessage: handleChatMessage,
