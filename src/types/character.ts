@@ -12,8 +12,9 @@ export type CharacterState =
   | "waving"
   | "sitting_floor";
 
-export type AccessoryHat = "none" | "cap" | "beanie" | "tophat" | "crown" | "headband";
-export type AccessoryGlasses = "none" | "round" | "square" | "sunglasses" | "monocle";
+export type AccessoryHat = "none" | "cap" | "beanie" | "tophat" | "crown" | "headband" | "witch" | "santa" | "beret" | "cowboy";
+export type AccessoryGlasses = "none" | "round" | "square" | "sunglasses" | "monocle" | "aviator" | "pixel" | "heart";
+export type HairStyle = "short" | "buzz" | "spiky" | "messy" | "long_straight" | "long_wavy" | "ponytail" | "pigtails" | "mohawk" | "bald" | "afro" | "bob";
 
 export interface Character {
   id: string;
@@ -32,6 +33,7 @@ export interface Character {
   animationTimer: number;
   hat: AccessoryHat;
   glasses: AccessoryGlasses;
+  hairStyle: HairStyle;
   colorShirt: string;
   colorHair: string;
   colorSkin: string;

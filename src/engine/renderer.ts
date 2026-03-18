@@ -13,7 +13,7 @@ import {
   ROOMS,
   MEETING_ROOM_INDEX,
 } from "@/lib/constants";
-import { Character, CharacterState, AccessoryHat, AccessoryGlasses } from "@/types/character";
+import { Character, CharacterState, AccessoryHat, AccessoryGlasses, HairStyle } from "@/types/character";
 import { Desk } from "@/types/office";
 import { DiscordStatus } from "@/types/discord";
 import { GameState } from "./types";
@@ -28,6 +28,7 @@ export class Renderer {
   // Per-character color overrides (set before drawing each character)
   private skinColor: string = COLORS.skin;
   private hairColor: string = COLORS.hair;
+  private currentHairStyle: HairStyle = "short";
 
   constructor(tilemap: Tilemap) {
     this.tilemap = tilemap;
@@ -665,6 +666,7 @@ export class Renderer {
     // Set per-character color overrides
     this.skinColor = character.colorSkin || COLORS.skin;
     this.hairColor = character.colorHair || COLORS.hair;
+    this.currentHairStyle = character.hairStyle || "short";
 
     // Draw character based on state
     switch (charState) {
@@ -802,6 +804,55 @@ export class Renderer {
         ctx.fillRect(headX - 1 * zoom, headY + 1 * zoom, headSize + 2 * zoom, 2 * zoom);
         break;
       }
+      case "witch": {
+        // Chapeu de bruxa
+        ctx.fillStyle = "#2d1b69";
+        // Aba larga
+        ctx.fillRect(headX - 3 * zoom, headY - 1 * zoom, headSize + 6 * zoom, 2 * zoom);
+        // Cone
+        ctx.fillRect(headX, headY - 5 * zoom, headSize, 4 * zoom);
+        ctx.fillRect(headX + 1 * zoom, headY - 8 * zoom, headSize - 2 * zoom, 3 * zoom);
+        ctx.fillRect(headX + 2 * zoom, headY - 10 * zoom, headSize - 4 * zoom, 2 * zoom);
+        // Faixa
+        ctx.fillStyle = "#f39c12";
+        ctx.fillRect(headX, headY - 3 * zoom, headSize, 1.5 * zoom);
+        break;
+      }
+      case "santa": {
+        // Gorro de Papai Noel
+        ctx.fillStyle = "#c0392b";
+        ctx.fillRect(headX - 1 * zoom, headY - 2 * zoom, headSize + 2 * zoom, 4 * zoom);
+        ctx.fillRect(headX + 1 * zoom, headY - 5 * zoom, headSize - 2 * zoom, 3 * zoom);
+        ctx.fillRect(headX + 3 * zoom, headY - 7 * zoom, headSize - 6 * zoom, 2 * zoom);
+        // Borda branca
+        ctx.fillStyle = "#ecf0f1";
+        ctx.fillRect(headX - 1 * zoom, headY, headSize + 2 * zoom, 2 * zoom);
+        // Pompom
+        ctx.fillRect(headX + headSize - 3 * zoom, headY - 8 * zoom, 3 * zoom, 3 * zoom);
+        break;
+      }
+      case "beret": {
+        // Boina francesa
+        ctx.fillStyle = "#2c3e50";
+        ctx.fillRect(headX - 2 * zoom, headY - 2 * zoom, headSize + 4 * zoom, 3 * zoom);
+        ctx.fillRect(headX - 1 * zoom, headY - 4 * zoom, headSize + 2 * zoom, 2 * zoom);
+        // Haste da boina
+        ctx.fillRect(headX + headSize / 2 - 1 * zoom, headY - 5 * zoom, 2 * zoom, 1.5 * zoom);
+        break;
+      }
+      case "cowboy": {
+        // Chapéu de cowboy
+        ctx.fillStyle = "#8B4513";
+        // Aba larga
+        ctx.fillRect(headX - 4 * zoom, headY - 1 * zoom, headSize + 8 * zoom, 2 * zoom);
+        // Copa
+        ctx.fillRect(headX, headY - 5 * zoom, headSize, 4 * zoom);
+        ctx.fillRect(headX + 1 * zoom, headY - 7 * zoom, headSize - 2 * zoom, 2 * zoom);
+        // Faixa
+        ctx.fillStyle = "#d4a574";
+        ctx.fillRect(headX, headY - 3 * zoom, headSize, 1.5 * zoom);
+        break;
+      }
     }
   }
 
@@ -878,6 +929,191 @@ export class Renderer {
         ctx.stroke();
         break;
       }
+      case "aviator": {
+        // Oculos aviador — lentes grandes teardrops
+        ctx.fillStyle = "rgba(139, 90, 43, 0.6)";
+        // Lente esquerda (teardrop)
+        ctx.fillRect(headX + 0.5 * zoom, eyeY - 1 * zoom, 4 * zoom, 4 * zoom);
+        // Lente direita
+        ctx.fillRect(headX + headSize - 4.5 * zoom, eyeY - 1 * zoom, 4 * zoom, 4 * zoom);
+        // Armacao dourada
+        ctx.strokeStyle = "#c0a030";
+        ctx.lineWidth = zoom * 0.7;
+        ctx.strokeRect(headX + 0.5 * zoom, eyeY - 1 * zoom, 4 * zoom, 4 * zoom);
+        ctx.strokeRect(headX + headSize - 4.5 * zoom, eyeY - 1 * zoom, 4 * zoom, 4 * zoom);
+        // Ponte
+        ctx.beginPath();
+        ctx.moveTo(headX + 4.5 * zoom, eyeY + 0.5 * zoom);
+        ctx.lineTo(headX + headSize - 4.5 * zoom, eyeY + 0.5 * zoom);
+        ctx.stroke();
+        break;
+      }
+      case "pixel": {
+        // Oculos pixel / 8-bit (tipo "deal with it")
+        ctx.fillStyle = "#000000";
+        // Lente esquerda (quadrada grossa)
+        ctx.fillRect(headX + 0.5 * zoom, eyeY - 0.5 * zoom, 4 * zoom, 3 * zoom);
+        // Lente direita
+        ctx.fillRect(headX + headSize - 4.5 * zoom, eyeY - 0.5 * zoom, 4 * zoom, 3 * zoom);
+        // Ponte grossa
+        ctx.fillRect(headX + 4.5 * zoom, eyeY, headSize - 9 * zoom, 1.5 * zoom);
+        // Reflexo
+        ctx.fillStyle = "rgba(255,255,255,0.2)";
+        ctx.fillRect(headX + 1 * zoom, eyeY, 1.5 * zoom, 1 * zoom);
+        ctx.fillRect(headX + headSize - 4 * zoom, eyeY, 1.5 * zoom, 1 * zoom);
+        break;
+      }
+      case "heart": {
+        // Oculos de coracao
+        ctx.fillStyle = "#e74c3c";
+        // Coracao esquerdo
+        ctx.beginPath();
+        const lhx = headX + 2.5 * zoom;
+        const lhy = eyeY + 1 * zoom;
+        const hr = 1.8 * zoom;
+        ctx.arc(lhx - hr * 0.5, lhy - hr * 0.3, hr, 0, Math.PI * 2);
+        ctx.arc(lhx + hr * 0.5, lhy - hr * 0.3, hr, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(lhx - hr * 1.2, lhy);
+        ctx.lineTo(lhx, lhy + hr * 1.4);
+        ctx.lineTo(lhx + hr * 1.2, lhy);
+        ctx.fill();
+        // Coracao direito
+        const rhx = headX + headSize - 2.5 * zoom;
+        ctx.beginPath();
+        ctx.arc(rhx - hr * 0.5, lhy - hr * 0.3, hr, 0, Math.PI * 2);
+        ctx.arc(rhx + hr * 0.5, lhy - hr * 0.3, hr, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(rhx - hr * 1.2, lhy);
+        ctx.lineTo(rhx, lhy + hr * 1.4);
+        ctx.lineTo(rhx + hr * 1.2, lhy);
+        ctx.fill();
+        // Ponte
+        ctx.fillStyle = "#c0392b";
+        ctx.fillRect(headX + 4 * zoom, eyeY + 0.5 * zoom, headSize - 8 * zoom, 1 * zoom);
+        break;
+      }
+    }
+  }
+
+  private drawHairStyle(
+    ctx: CanvasRenderingContext2D,
+    headX: number, headY: number, headSize: number, zoom: number
+  ): void {
+    ctx.fillStyle = this.hairColor;
+    const hs = this.currentHairStyle;
+
+    switch (hs) {
+      case "bald":
+        // Sem cabelo
+        break;
+      case "buzz":
+        // Cabelo raspado — fina camada
+        ctx.globalAlpha = 0.5;
+        ctx.fillRect(headX, headY, headSize, 2 * zoom);
+        ctx.globalAlpha = 1;
+        break;
+      case "short":
+      default:
+        // Cabelo curto padrao
+        ctx.fillRect(headX, headY, headSize, 3 * zoom);
+        break;
+      case "spiky": {
+        // Base
+        ctx.fillRect(headX, headY, headSize, 2.5 * zoom);
+        // Pontas
+        const spikeW = 2 * zoom;
+        for (let sx = headX; sx < headX + headSize - 1; sx += spikeW + zoom) {
+          ctx.fillRect(sx, headY - 2 * zoom, spikeW, 2.5 * zoom);
+        }
+        break;
+      }
+      case "messy": {
+        // Cabelo bagunçado — irregular
+        ctx.fillRect(headX, headY, headSize, 3 * zoom);
+        ctx.fillRect(headX - 1 * zoom, headY + 1 * zoom, 2 * zoom, 2 * zoom);
+        ctx.fillRect(headX + headSize - 1 * zoom, headY, 2 * zoom, 2 * zoom);
+        ctx.fillRect(headX + 2 * zoom, headY - 1 * zoom, 3 * zoom, 1.5 * zoom);
+        break;
+      }
+      case "long_straight": {
+        // Cabelo longo liso — cai dos lados
+        ctx.fillRect(headX, headY, headSize, 3 * zoom);
+        // Lado esquerdo desce
+        ctx.fillRect(headX - 1.5 * zoom, headY + 1 * zoom, 2 * zoom, headSize + 4 * zoom);
+        // Lado direito desce
+        ctx.fillRect(headX + headSize - 0.5 * zoom, headY + 1 * zoom, 2 * zoom, headSize + 4 * zoom);
+        break;
+      }
+      case "long_wavy": {
+        // Cabelo longo ondulado
+        ctx.fillRect(headX, headY, headSize, 3 * zoom);
+        // Ondas dos lados
+        ctx.fillRect(headX - 2 * zoom, headY + 1 * zoom, 2.5 * zoom, headSize + 3 * zoom);
+        ctx.fillRect(headX - 1 * zoom, headY + headSize + 2 * zoom, 2 * zoom, 3 * zoom);
+        ctx.fillRect(headX + headSize - 0.5 * zoom, headY + 1 * zoom, 2.5 * zoom, headSize + 3 * zoom);
+        ctx.fillRect(headX + headSize, headY + headSize + 2 * zoom, 2 * zoom, 3 * zoom);
+        break;
+      }
+      case "ponytail": {
+        // Cabelo preso — franja + rabo atras
+        ctx.fillRect(headX, headY, headSize, 3 * zoom);
+        // Rabo para direita
+        ctx.fillRect(headX + headSize, headY + 2 * zoom, 2 * zoom, 2 * zoom);
+        ctx.fillRect(headX + headSize + 1 * zoom, headY + 3 * zoom, 2 * zoom, 4 * zoom);
+        ctx.fillRect(headX + headSize, headY + 6 * zoom, 2 * zoom, 3 * zoom);
+        break;
+      }
+      case "pigtails": {
+        // Maria-chiquinha — dois rabos laterais
+        ctx.fillRect(headX, headY, headSize, 3 * zoom);
+        // Rabo esquerdo
+        ctx.fillRect(headX - 2 * zoom, headY + 2 * zoom, 2 * zoom, 5 * zoom);
+        ctx.fillRect(headX - 1.5 * zoom, headY + 6 * zoom, 2 * zoom, 3 * zoom);
+        // Rabo direito
+        ctx.fillRect(headX + headSize, headY + 2 * zoom, 2 * zoom, 5 * zoom);
+        ctx.fillRect(headX + headSize - 0.5 * zoom, headY + 6 * zoom, 2 * zoom, 3 * zoom);
+        break;
+      }
+      case "mohawk": {
+        // Moicano — crista central
+        const mohawkW = 3 * zoom;
+        const mohawkX = headX + (headSize - mohawkW) / 2;
+        ctx.fillRect(mohawkX, headY - 4 * zoom, mohawkW, 4 * zoom + 2 * zoom);
+        // Base dos lados raspada
+        ctx.globalAlpha = 0.3;
+        ctx.fillRect(headX, headY, headSize, 2 * zoom);
+        ctx.globalAlpha = 1;
+        break;
+      }
+      case "afro": {
+        // Afro — volume esférico
+        const afroPad = 3 * zoom;
+        ctx.beginPath();
+        ctx.arc(
+          headX + headSize / 2,
+          headY + headSize * 0.3,
+          headSize / 2 + afroPad,
+          0, Math.PI * 2
+        );
+        ctx.fill();
+        // Redesenha o rosto por cima
+        ctx.fillStyle = this.skinColor;
+        ctx.fillRect(headX + 1 * zoom, headY + 2 * zoom, headSize - 2 * zoom, headSize - 2 * zoom);
+        break;
+      }
+      case "bob": {
+        // Cabelo bob / chanel
+        ctx.fillRect(headX - 1 * zoom, headY, headSize + 2 * zoom, 3 * zoom);
+        // Lados descendo ate abaixo da orelha
+        ctx.fillRect(headX - 1.5 * zoom, headY + 1 * zoom, 2.5 * zoom, headSize - 1 * zoom);
+        ctx.fillRect(headX + headSize - 1 * zoom, headY + 1 * zoom, 2.5 * zoom, headSize - 1 * zoom);
+        // Franja
+        ctx.fillRect(headX, headY, headSize, 2 * zoom);
+        break;
+      }
     }
   }
 
@@ -897,8 +1133,7 @@ export class Renderer {
     ctx.fillRect(headX, y, headSize, headSize);
 
     // Hair
-    ctx.fillStyle = this.hairColor;
-    ctx.fillRect(headX, y, headSize, 3 * zoom);
+    this.drawHairStyle(ctx, headX, y, headSize, zoom);
 
     // Eyes
     ctx.fillStyle = "#000000";
@@ -1325,8 +1560,7 @@ export class Renderer {
     ctx.fillRect(headX, sitY, headSize, headSize);
 
     // Cabelo
-    ctx.fillStyle = this.hairColor;
-    ctx.fillRect(headX, sitY, headSize, 3 * zoom);
+    this.drawHairStyle(ctx, headX, sitY, headSize, zoom);
 
     // Olhos
     ctx.fillStyle = "#000000";

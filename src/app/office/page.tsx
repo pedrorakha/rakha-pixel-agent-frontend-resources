@@ -13,6 +13,8 @@ import { api } from "@/lib/api";
 import { MusicPlayer } from "@/components/music/music-player";
 import { PasswordGate } from "@/components/auth/password-gate";
 import { MemberSelector } from "@/components/auth/member-selector";
+import { VisualEditor, VisualData } from "@/components/character/visual-editor";
+import { AccessoryHat, AccessoryGlasses, HairStyle } from "@/types/character";
 
 interface ApiMember {
   id: string;
@@ -23,6 +25,12 @@ interface ApiMember {
   current_status: string;
   current_animation: string;
   is_active: boolean;
+  accessory_hat: string;
+  accessory_glasses: string;
+  hair_style: string;
+  color_shirt: string;
+  color_hair: string;
+  color_skin: string;
   created_at: string;
   updated_at: string;
 }
@@ -43,6 +51,12 @@ interface MemberEntry {
   discordId: string;
   status: DiscordStatus;
   deskLabel: string;
+  hat: AccessoryHat;
+  glasses: AccessoryGlasses;
+  hairStyle: HairStyle;
+  colorShirt: string;
+  colorHair: string;
+  colorSkin: string;
 }
 
 const stateDescriptions: Record<DiscordStatus, string> = {
@@ -57,6 +71,7 @@ export default function OfficePage() {
   const [members, setMembers] = useState<MemberEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showVisualEditor, setShowVisualEditor] = useState(false);
   useDiscordPresence();
   const presences = useDiscordStore((s) => s.presences);
 
@@ -101,6 +116,12 @@ export default function OfficePage() {
         discordId: m.discord_id,
         status: (m.current_status as DiscordStatus) || "offline",
         deskLabel: m.desk_id ? deskMap.get(m.desk_id) ?? "Unknown Desk" : "No Desk",
+        hat: (m.accessory_hat || "none") as AccessoryHat,
+        glasses: (m.accessory_glasses || "none") as AccessoryGlasses,
+        hairStyle: (m.hair_style || "short") as HairStyle,
+        colorShirt: m.color_shirt || "#3498db",
+        colorHair: m.color_hair || "#4a3728",
+        colorSkin: m.color_skin || "#ffccaa",
       }));
       setMembers(mapped);
     } catch (err) {
@@ -245,12 +266,20 @@ export default function OfficePage() {
                     <p className="font-pixel text-[8px] text-pixel-muted mb-2">Logado como:</p>
                     <div className="flex items-center justify-between">
                       <span className="font-pixel text-[10px] text-pixel-accent">{selectedMemberName}</span>
-                      <button
-                        onClick={clearSelectedMember}
-                        className="font-pixel text-[9px] text-pixel-muted hover:text-pixel-accent transition-colors border-2 border-pixel-panel hover:border-pixel-accent px-3 py-1.5"
-                      >
-                        TROCAR
-                      </button>
+                      <div className="flex gap-1.5">
+                        <button
+                          onClick={() => setShowVisualEditor(true)}
+                          className="font-pixel text-[9px] text-pixel-muted hover:text-pixel-accent transition-colors border-2 border-pixel-panel hover:border-pixel-accent px-3 py-1.5"
+                        >
+                          VISUAL
+                        </button>
+                        <button
+                          onClick={clearSelectedMember}
+                          className="font-pixel text-[9px] text-pixel-muted hover:text-pixel-accent transition-colors border-2 border-pixel-panel hover:border-pixel-accent px-3 py-1.5"
+                        >
+                          TROCAR
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -280,6 +309,30 @@ export default function OfficePage() {
           )}
         </div>
       )}
+
+      {/* Visual Editor Overlay */}
+      {showVisualEditor && selectedMemberId && (() => {
+        const currentMember = members.find((m) => m.id === selectedMemberId);
+        if (!currentMember) return null;
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+            <VisualEditor
+              memberId={selectedMemberId}
+              initialHat={currentMember.hat}
+              initialGlasses={currentMember.glasses}
+              initialHairStyle={currentMember.hairStyle}
+              initialColorShirt={currentMember.colorShirt}
+              initialColorHair={currentMember.colorHair}
+              initialColorSkin={currentMember.colorSkin}
+              onClose={() => setShowVisualEditor(false)}
+              onSave={(_data: VisualData) => {
+                // Recarrega dados para atualizar sidebar e canvas
+                fetchData();
+              }}
+            />
+          </div>
+        );
+      })()}
     </PasswordGate>
   );
 }

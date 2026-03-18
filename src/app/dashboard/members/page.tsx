@@ -33,6 +33,7 @@ interface ApiMember {
   is_active: boolean;
   accessory_hat: string;
   accessory_glasses: string;
+  hair_style: string;
   color_shirt: string;
   color_hair: string;
   color_skin: string;
@@ -61,6 +62,7 @@ interface Member {
   isActive: boolean;
   hat: string;
   glasses: string;
+  hairStyle: string;
   colorShirt: string;
   colorHair: string;
   colorSkin: string;
@@ -91,6 +93,7 @@ export default function MembersPage() {
   const [formDeskId, setFormDeskId] = useState<string>("");
   const [formHat, setFormHat] = useState<string>("none");
   const [formGlasses, setFormGlasses] = useState<string>("none");
+  const [formHairStyle, setFormHairStyle] = useState<string>("short");
   const [formColorShirt, setFormColorShirt] = useState("#3498db");
   const [formColorHair, setFormColorHair] = useState("#4a3728");
   const [formColorSkin, setFormColorSkin] = useState("#ffccaa");
@@ -123,6 +126,7 @@ export default function MembersPage() {
         isActive: m.is_active,
         hat: m.accessory_hat || "none",
         glasses: m.accessory_glasses || "none",
+        hairStyle: m.hair_style || "short",
         colorShirt: m.color_shirt || SPRITE_COLORS[m.character_sprite]?.shirt || "#3498db",
         colorHair: m.color_hair || SPRITE_COLORS[m.character_sprite]?.hair || "#4a3728",
         colorSkin: m.color_skin || "#ffccaa",
@@ -154,6 +158,7 @@ export default function MembersPage() {
     setFormDeskId(member.deskId ?? "");
     setFormHat(member.hat);
     setFormGlasses(member.glasses);
+    setFormHairStyle(member.hairStyle);
     setFormColorShirt(member.colorShirt);
     setFormColorHair(member.colorHair);
     setFormColorSkin(member.colorSkin);
@@ -176,6 +181,7 @@ export default function MembersPage() {
     setFormDeskId("");
     setFormHat("none");
     setFormGlasses("none");
+    setFormHairStyle("short");
     setFormColorShirt("#3498db");
     setFormColorHair("#4a3728");
     setFormColorSkin("#ffccaa");
@@ -193,6 +199,7 @@ export default function MembersPage() {
         desk_id: formDeskId || null,
         accessory_hat: formHat,
         accessory_glasses: formGlasses,
+        hair_style: formHairStyle,
         color_shirt: formColorShirt,
         color_hair: formColorHair,
         color_skin: formColorSkin,
@@ -204,7 +211,7 @@ export default function MembersPage() {
     } finally {
       setMutating(false);
     }
-  }, [formName, formDiscordId, formSprite, formDeskId, formHat, formGlasses, formColorShirt, formColorHair, formColorSkin, fetchData]);
+  }, [formName, formDiscordId, formSprite, formDeskId, formHat, formGlasses, formHairStyle, formColorShirt, formColorHair, formColorSkin, fetchData]);
 
   const handleEdit = useCallback(async () => {
     if (!editingMember || !formName) return;
@@ -217,6 +224,7 @@ export default function MembersPage() {
         desk_id: formDeskId || null,
         accessory_hat: formHat,
         accessory_glasses: formGlasses,
+        hair_style: formHairStyle,
         color_shirt: formColorShirt,
         color_hair: formColorHair,
         color_skin: formColorSkin,
@@ -229,7 +237,7 @@ export default function MembersPage() {
     } finally {
       setMutating(false);
     }
-  }, [editingMember, formName, formDiscordId, formSprite, formDeskId, formHat, formGlasses, formColorShirt, formColorHair, formColorSkin, fetchData]);
+  }, [editingMember, formName, formDiscordId, formSprite, formDeskId, formHat, formGlasses, formHairStyle, formColorShirt, formColorHair, formColorSkin, fetchData]);
 
   const handleRemove = useCallback(async (id: string) => {
     try {
@@ -348,6 +356,7 @@ export default function MembersPage() {
           deskId={formDeskId}
           hat={formHat}
           glasses={formGlasses}
+          hairStyle={formHairStyle}
           desks={unassignedDesks}
           onNameChange={setFormName}
           onDiscordIdChange={setFormDiscordId}
@@ -355,6 +364,7 @@ export default function MembersPage() {
           onDeskIdChange={setFormDeskId}
           onHatChange={setFormHat}
           onGlassesChange={setFormGlasses}
+          onHairStyleChange={setFormHairStyle}
           colorShirt={formColorShirt}
           colorHair={formColorHair}
           colorSkin={formColorSkin}
@@ -377,6 +387,7 @@ export default function MembersPage() {
           deskId={formDeskId}
           hat={formHat}
           glasses={formGlasses}
+          hairStyle={formHairStyle}
           desks={[
             ...(editingMember?.deskId ? desks.filter((d) => d.id === editingMember.deskId) : []),
             ...unassignedDesks,
@@ -387,6 +398,7 @@ export default function MembersPage() {
           onDeskIdChange={setFormDeskId}
           onHatChange={setFormHat}
           onGlassesChange={setFormGlasses}
+          onHairStyleChange={setFormHairStyle}
           colorShirt={formColorShirt}
           colorHair={formColorHair}
           colorSkin={formColorSkin}
@@ -710,21 +722,43 @@ function drawPreviewGlasses(ctx: CanvasRenderingContext2D, headX: number, headY:
   }
 }
 
-const HAT_OPTIONS: { value: string; label: string }[] = [
-  { value: "none", label: "None" },
-  { value: "cap", label: "Cap" },
-  { value: "beanie", label: "Beanie" },
-  { value: "tophat", label: "Top Hat" },
-  { value: "crown", label: "Crown" },
-  { value: "headband", label: "Headband" },
+const HAT_OPTIONS: { value: string; label: string; icon: string }[] = [
+  { value: "none", label: "None", icon: "🚫" },
+  { value: "cap", label: "Cap", icon: "🧢" },
+  { value: "beanie", label: "Beanie", icon: "🎿" },
+  { value: "tophat", label: "Top Hat", icon: "🎩" },
+  { value: "crown", label: "Crown", icon: "👑" },
+  { value: "headband", label: "Headband", icon: "🏋️" },
+  { value: "witch", label: "Witch", icon: "🧙" },
+  { value: "santa", label: "Santa", icon: "🎅" },
+  { value: "beret", label: "Beret", icon: "🇫🇷" },
+  { value: "cowboy", label: "Cowboy", icon: "🤠" },
 ];
 
-const GLASSES_OPTIONS: { value: string; label: string }[] = [
-  { value: "none", label: "None" },
-  { value: "round", label: "Round" },
-  { value: "square", label: "Square" },
-  { value: "sunglasses", label: "Sunglasses" },
-  { value: "monocle", label: "Monocle" },
+const GLASSES_OPTIONS: { value: string; label: string; icon: string }[] = [
+  { value: "none", label: "None", icon: "🚫" },
+  { value: "round", label: "Round", icon: "👓" },
+  { value: "square", label: "Square", icon: "🤓" },
+  { value: "sunglasses", label: "Shades", icon: "🕶️" },
+  { value: "monocle", label: "Monocle", icon: "🧐" },
+  { value: "aviator", label: "Aviator", icon: "✈️" },
+  { value: "pixel", label: "Pixel", icon: "🎮" },
+  { value: "heart", label: "Heart", icon: "❤️" },
+];
+
+const HAIR_OPTIONS: { value: string; label: string; icon: string }[] = [
+  { value: "short", label: "Short", icon: "✂️" },
+  { value: "buzz", label: "Buzz", icon: "💈" },
+  { value: "spiky", label: "Spiky", icon: "⚡" },
+  { value: "messy", label: "Messy", icon: "🌪️" },
+  { value: "long_straight", label: "Long", icon: "💇" },
+  { value: "long_wavy", label: "Wavy", icon: "🌊" },
+  { value: "ponytail", label: "Ponytail", icon: "🎀" },
+  { value: "pigtails", label: "Pigtails", icon: "🎗️" },
+  { value: "mohawk", label: "Mohawk", icon: "🤘" },
+  { value: "bald", label: "Bald", icon: "🥚" },
+  { value: "afro", label: "Afro", icon: "🌺" },
+  { value: "bob", label: "Bob", icon: "💅" },
 ];
 
 function MemberForm({
@@ -734,6 +768,7 @@ function MemberForm({
   deskId,
   hat,
   glasses,
+  hairStyle,
   colorShirt,
   colorHair,
   colorSkin,
@@ -744,6 +779,7 @@ function MemberForm({
   onDeskIdChange,
   onHatChange,
   onGlassesChange,
+  onHairStyleChange,
   onColorShirtChange,
   onColorHairChange,
   onColorSkinChange,
@@ -758,6 +794,7 @@ function MemberForm({
   deskId: string;
   hat: string;
   glasses: string;
+  hairStyle: string;
   colorShirt: string;
   colorHair: string;
   colorSkin: string;
@@ -768,6 +805,7 @@ function MemberForm({
   onDeskIdChange: (v: string) => void;
   onHatChange: (v: string) => void;
   onGlassesChange: (v: string) => void;
+  onHairStyleChange: (v: string) => void;
   onColorShirtChange: (v: string) => void;
   onColorHairChange: (v: string) => void;
   onColorSkinChange: (v: string) => void;
@@ -813,31 +851,69 @@ function MemberForm({
         <span className="font-pixel text-[9px] text-pixel-muted">{sprite}</span>
       </div>
 
-      {/* Accessories */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="flex flex-col gap-1">
-          <label className="font-pixel text-[11px] text-pixel-muted uppercase">Hat</label>
-          <select
-            value={hat}
-            onChange={(e) => onHatChange(e.target.value)}
-            className="font-pixel text-[9px] bg-pixel-bg text-pixel-text border-2 border-pixel-panel px-2 py-1.5"
-          >
-            {HAT_OPTIONS.map((h) => (
-              <option key={h.value} value={h.value}>{h.label}</option>
-            ))}
-          </select>
+      {/* Hair Style */}
+      <div className="flex flex-col gap-1">
+        <label className="font-pixel text-[11px] text-pixel-muted uppercase">Hair Style</label>
+        <div className="grid grid-cols-6 gap-1">
+          {HAIR_OPTIONS.map((h) => (
+            <button
+              key={h.value}
+              onClick={() => onHairStyleChange(h.value)}
+              className={`flex flex-col items-center gap-0.5 py-1 border-2 transition-colors ${
+                hairStyle === h.value
+                  ? "border-pixel-accent bg-pixel-accent/20 text-pixel-accent"
+                  : "border-pixel-panel text-pixel-muted hover:border-pixel-accent/50"
+              }`}
+              title={h.label}
+            >
+              <span className="text-xs">{h.icon}</span>
+              <span className="font-pixel text-[6px]">{h.label}</span>
+            </button>
+          ))}
         </div>
-        <div className="flex flex-col gap-1">
-          <label className="font-pixel text-[11px] text-pixel-muted uppercase">Glasses</label>
-          <select
-            value={glasses}
-            onChange={(e) => onGlassesChange(e.target.value)}
-            className="font-pixel text-[9px] bg-pixel-bg text-pixel-text border-2 border-pixel-panel px-2 py-1.5"
-          >
-            {GLASSES_OPTIONS.map((g) => (
-              <option key={g.value} value={g.value}>{g.label}</option>
-            ))}
-          </select>
+      </div>
+
+      {/* Hats */}
+      <div className="flex flex-col gap-1">
+        <label className="font-pixel text-[11px] text-pixel-muted uppercase">Hat</label>
+        <div className="grid grid-cols-5 gap-1">
+          {HAT_OPTIONS.map((h) => (
+            <button
+              key={h.value}
+              onClick={() => onHatChange(h.value)}
+              className={`flex flex-col items-center gap-0.5 py-1 border-2 transition-colors ${
+                hat === h.value
+                  ? "border-pixel-accent bg-pixel-accent/20 text-pixel-accent"
+                  : "border-pixel-panel text-pixel-muted hover:border-pixel-accent/50"
+              }`}
+              title={h.label}
+            >
+              <span className="text-xs">{h.icon}</span>
+              <span className="font-pixel text-[6px]">{h.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Glasses */}
+      <div className="flex flex-col gap-1">
+        <label className="font-pixel text-[11px] text-pixel-muted uppercase">Glasses</label>
+        <div className="grid grid-cols-4 gap-1">
+          {GLASSES_OPTIONS.map((g) => (
+            <button
+              key={g.value}
+              onClick={() => onGlassesChange(g.value)}
+              className={`flex flex-col items-center gap-0.5 py-1 border-2 transition-colors ${
+                glasses === g.value
+                  ? "border-pixel-accent bg-pixel-accent/20 text-pixel-accent"
+                  : "border-pixel-panel text-pixel-muted hover:border-pixel-accent/50"
+              }`}
+              title={g.label}
+            >
+              <span className="text-xs">{g.icon}</span>
+              <span className="font-pixel text-[6px]">{g.label}</span>
+            </button>
+          ))}
         </div>
       </div>
 

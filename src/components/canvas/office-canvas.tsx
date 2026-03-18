@@ -48,6 +48,7 @@ interface ApiMember {
   is_active: boolean;
   accessory_hat: string;
   accessory_glasses: string;
+  hair_style: string;
   color_shirt: string;
   color_hair: string;
   color_skin: string;
@@ -554,6 +555,7 @@ export function OfficeCanvas() {
               animationTimer: 0,
               hat: (m.accessory_hat || "none") as Character["hat"],
               glasses: (m.accessory_glasses || "none") as Character["glasses"],
+              hairStyle: (m.hair_style || "short") as Character["hairStyle"],
               colorShirt: m.color_shirt || color,
               colorHair: m.color_hair || "#4a3728",
               colorSkin: m.color_skin || "#ffccaa",
