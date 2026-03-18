@@ -102,6 +102,7 @@ export const ANIMATION_SPEEDS: Record<CharacterState, number> = {
   sleeping: 800,
   walking: 100,
   idle: 600,
+  dancing: 180,
 };
 
 // ============================================================
@@ -202,10 +203,16 @@ export const OFFICE_LAYOUT: number[][] = (() => {
       }
     }
 
-    // Door opening at bottom center (2 tiles wide)
+    // Door opening at bottom center (3 tiles wide)
     const doorX = rx + Math.floor(rw / 2);
-    set(doorX, ry + rh, (doorX + ry + rh) % 2 === 0 ? 4 : 5);
     set(doorX - 1, ry + rh, (doorX - 1 + ry + rh) % 2 === 0 ? 4 : 5);
+    set(doorX, ry + rh, (doorX + ry + rh) % 2 === 0 ? 4 : 5);
+    set(doorX + 1, ry + rh, (doorX + 1 + ry + rh) % 2 === 0 ? 4 : 5);
+
+    // Door opening at top center (3 tiles wide)
+    set(doorX - 1, ry - 1, (doorX - 1 + ry - 1) % 2 === 0 ? 4 : 5);
+    set(doorX, ry - 1, (doorX + ry - 1) % 2 === 0 ? 4 : 5);
+    set(doorX + 1, ry - 1, (doorX + 1 + ry - 1) % 2 === 0 ? 4 : 5);
   }
 
   return layout;

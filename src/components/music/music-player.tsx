@@ -370,14 +370,14 @@ export function MusicPlayer() {
               <p className="font-pixel text-[9px] text-pixel-accent">
                 {state.isPlaying ? "A JHAM ESTA ROLANDO!" : "INICIE SUA JHAM AGORA!"}
               </p>
-              <p className="font-pixel text-[6px] text-pixel-muted mt-0.5">
+              <p className="font-pixel text-[9px] text-pixel-muted mt-0.5">
                 {state.isPlaying
                   ? `Tocando: ${state.currentSong?.title ?? "..."}`
                   : "Clique para adicionar uma musica"
                 }
               </p>
             </div>
-            <span className="font-pixel text-[7px] text-pixel-muted">[X]</span>
+            <span className="font-pixel text-[10px] text-pixel-muted">[X]</span>
           </button>
         </div>
       )}
@@ -411,21 +411,21 @@ export function MusicPlayer() {
       {!expanded && (
         <button
           onClick={() => { setExpanded(true); unlockAudio(); }}
-          className="fixed bottom-4 left-4 z-50 flex items-center gap-2 bg-pixel-surface border-2 border-pixel-panel hover:border-pixel-accent transition-colors cursor-pointer"
-          style={{ maxWidth: 240 }}
+          className="fixed bottom-6 left-6 z-50 flex items-center gap-2 bg-pixel-surface border-2 border-pixel-panel hover:border-pixel-accent transition-colors cursor-pointer"
+          style={{ maxWidth: 280 }}
         >
-          <div className="flex items-center gap-2 px-3 py-2 w-full">
-            <span className="font-pixel text-[10px] text-pixel-accent shrink-0">&#9835;</span>
+          <div className="flex items-center gap-3 px-4 py-2.5 w-full">
+            <span className="font-pixel text-[13px] text-pixel-accent shrink-0">&#9835;</span>
             <div className="flex-1 min-w-0">
-              <span className="font-pixel text-[7px] text-pixel-text truncate block">
+              <span className="font-pixel text-[10px] text-pixel-text truncate block">
                 {currentSong ? currentSong.title : "JUKEBOX"}
               </span>
               {currentSong && songDuration > 0 && (
-                <div className="flex items-center gap-1 mt-0.5">
-                  <div className="flex-1 h-1 bg-pixel-bg overflow-hidden">
+                <div className="flex items-center gap-1 mt-1">
+                  <div className="flex-1 h-1.5 bg-pixel-bg overflow-hidden">
                     <div className="h-full bg-pixel-accent transition-all duration-500" style={{ width: `${progress * 100}%` }} />
                   </div>
-                  <span className="font-pixel text-[5px] text-pixel-muted shrink-0">
+                  <span className="font-pixel text-[8px] text-pixel-muted shrink-0">
                     {formatTime(elapsed)}/{formatTime(songDuration)}
                   </span>
                 </div>
@@ -437,35 +437,35 @@ export function MusicPlayer() {
 
       {/* Expanded */}
       {expanded && (
-        <div className="fixed bottom-2 left-2 right-2 sm:right-auto sm:left-4 sm:bottom-4 z-50 w-auto sm:w-[350px] max-h-[70vh] sm:max-h-[500px] flex flex-col bg-pixel-surface border-4 border-pixel-panel shadow-[4px_4px_0px_0px_rgba(0,0,0,0.5)]">
-          <div className="flex items-center justify-between px-3 py-2 border-b-2 border-pixel-panel">
-            <span className="font-pixel text-[10px] text-pixel-accent">&#9835; JUKEBOX</span>
-            <button onClick={() => setExpanded(false)} className="font-pixel text-[8px] text-pixel-muted hover:text-pixel-accent transition-colors">[MINIMIZE]</button>
+        <div className="fixed bottom-4 left-4 right-4 sm:right-auto sm:left-6 sm:bottom-6 z-50 w-auto sm:w-[380px] max-h-[70vh] sm:max-h-[500px] flex flex-col bg-pixel-surface border-4 border-pixel-panel shadow-[4px_4px_0px_0px_rgba(0,0,0,0.5)]">
+          <div className="flex items-center justify-between px-4 py-3 border-b-2 border-pixel-panel">
+            <span className="font-pixel text-[13px] text-pixel-accent">&#9835; JUKEBOX</span>
+            <button onClick={() => setExpanded(false)} className="font-pixel text-[11px] text-pixel-muted hover:text-pixel-accent transition-colors">[MINIMIZE]</button>
           </div>
 
-          <div className="flex-1 overflow-y-auto px-3 py-2 space-y-3">
+          <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
             {/* Now Playing */}
             <div>
-              <p className="font-pixel text-[7px] text-pixel-muted uppercase mb-1">Now Playing</p>
+              <p className="font-pixel text-[10px] text-pixel-muted uppercase mb-1.5">Now Playing</p>
               {currentSong ? (
                 <div className="space-y-2">
-                  <p className="font-pixel text-[8px] text-pixel-text truncate">{currentSong.title}</p>
+                  <p className="font-pixel text-[11px] text-pixel-text truncate">{currentSong.title}</p>
                   <div className="space-y-1">
-                    <div className="w-full h-2 bg-pixel-bg border border-pixel-panel overflow-hidden">
+                    <div className="w-full h-2.5 bg-pixel-bg border border-pixel-panel overflow-hidden">
                       <div className="h-full bg-pixel-accent transition-all duration-500" style={{ width: `${progress * 100}%` }} />
                     </div>
                     <div className="flex justify-between">
-                      <span className="font-pixel text-[6px] text-pixel-muted">{formatTime(elapsed)}</span>
-                      <span className="font-pixel text-[6px] text-pixel-muted">{songDuration > 0 ? formatTime(songDuration) : "--:--"}</span>
+                      <span className="font-pixel text-[9px] text-pixel-muted">{formatTime(elapsed)}</span>
+                      <span className="font-pixel text-[9px] text-pixel-muted">{songDuration > 0 ? formatTime(songDuration) : "--:--"}</span>
                     </div>
                   </div>
                   {/* Volume */}
                   <div className="flex items-center gap-2">
-                    <span className="font-pixel text-[6px] text-pixel-muted shrink-0">VOL</span>
+                    <span className="font-pixel text-[9px] text-pixel-muted shrink-0">VOL</span>
                     <input type="range" min={0} max={100} value={volume}
                       onChange={(e) => setVolume(parseInt(e.target.value, 10))}
-                      className="flex-1 h-1 cursor-pointer" style={{ accentColor: "#e94560" }} />
-                    <span className="font-pixel text-[6px] text-pixel-muted shrink-0 w-6 text-right">{volume}</span>
+                      className="flex-1 h-1.5 cursor-pointer" style={{ accentColor: "#e94560" }} />
+                    <span className="font-pixel text-[9px] text-pixel-muted shrink-0 w-7 text-right">{volume}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <Button variant="ghost" size="sm" onClick={() => setVolume(volume > 0 ? 0 : 50)}>
@@ -475,15 +475,15 @@ export function MusicPlayer() {
                   </div>
                 </div>
               ) : (
-                <p className="font-pixel text-[8px] text-pixel-muted">Nothing playing. Add a song!</p>
+                <p className="font-pixel text-[11px] text-pixel-muted">Nothing playing. Add a song!</p>
               )}
             </div>
 
             {/* Add URL */}
             <div>
-              <p className="font-pixel text-[7px] text-pixel-muted uppercase mb-1">Add YouTube URL</p>
-              <div className="flex gap-1">
-                <Input placeholder="Paste YouTube URL..." className="text-[8px] py-1"
+              <p className="font-pixel text-[10px] text-pixel-muted uppercase mb-1.5">Add YouTube URL</p>
+              <div className="flex gap-2">
+                <Input placeholder="Paste YouTube URL..." className="text-[10px] py-1.5"
                   value={urlInput} onChange={(e) => setUrlInput(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter") handleAddUrl(); }} />
                 <Button variant="primary" size="sm" onClick={handleAddUrl}>ADD</Button>
@@ -492,23 +492,23 @@ export function MusicPlayer() {
 
             {/* Queue (upcoming only) */}
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <p className="font-pixel text-[7px] text-pixel-muted uppercase">Up Next ({state.queue.length})</p>
+              <div className="flex items-center justify-between mb-1.5">
+                <p className="font-pixel text-[10px] text-pixel-muted uppercase">Up Next ({state.queue.length})</p>
                 {state.queue.length > 0 && (
                   <Button variant="danger" size="sm" onClick={handleClearQueue}>CLEAR ALL</Button>
                 )}
               </div>
               {state.queue.length === 0 ? (
-                <p className="font-pixel text-[7px] text-pixel-muted">No upcoming songs</p>
+                <p className="font-pixel text-[10px] text-pixel-muted">No upcoming songs</p>
               ) : (
-                <div className="space-y-1 max-h-[120px] overflow-y-auto">
+                <div className="space-y-1.5 max-h-[140px] overflow-y-auto">
                   {state.queue.map((item, i) => (
-                    <div key={item.id} className="flex items-center justify-between gap-1 px-2 py-1 bg-pixel-bg border border-pixel-panel/50">
+                    <div key={item.id} className="flex items-center justify-between gap-2 px-3 py-1.5 bg-pixel-bg border border-pixel-panel/50">
                       <div className="flex-1 min-w-0">
-                        <p className="font-pixel text-[7px] text-pixel-text truncate">
+                        <p className="font-pixel text-[10px] text-pixel-text truncate">
                           {i + 1}. {item.title}
                         </p>
-                        <p className="font-pixel text-[6px] text-pixel-muted">
+                        <p className="font-pixel text-[9px] text-pixel-muted">
                           {item.addedBy} {item.duration > 0 && `· ${formatTime(item.duration)}`}
                         </p>
                       </div>

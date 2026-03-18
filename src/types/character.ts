@@ -6,7 +6,8 @@ export type CharacterState =
   | "drinking_coffee"
   | "sleeping"
   | "walking"
-  | "idle";
+  | "idle"
+  | "dancing";
 
 export type AccessoryHat = "none" | "cap" | "beanie" | "tophat" | "crown" | "headband";
 export type AccessoryGlasses = "none" | "round" | "square" | "sunglasses" | "monocle";
@@ -31,6 +32,8 @@ export interface Character {
   colorShirt: string;
   colorHair: string;
   colorSkin: string;
+  jumpOffset: number;
+  jumpTimer: number;
 }
 
 export interface AnimationDef {
@@ -53,4 +56,5 @@ export const CHARACTER_ANIMATIONS: Record<CharacterState, AnimationDef> = {
   sleeping: { frames: 2, speed: 800, loop: true },
   walking: { frames: 4, speed: 100, loop: true },
   idle: { frames: 2, speed: 600, loop: true },
+  dancing: { frames: 4, speed: 180, loop: true },
 };

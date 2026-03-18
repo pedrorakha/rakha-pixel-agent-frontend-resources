@@ -274,8 +274,8 @@ export default function MembersPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="font-pixel text-sm text-pixel-accent">MEMBERS</h1>
-          <p className="font-pixel text-[7px] text-pixel-muted mt-1">
+          <h1 className="font-pixel text-base text-pixel-accent">MEMBERS</h1>
+          <p className="font-pixel text-[10px] text-pixel-muted mt-1">
             {members.length} members • {members.filter((m) => m.isActive).length} active
           </p>
         </div>
@@ -283,8 +283,8 @@ export default function MembersPage() {
       </div>
 
       {error && (
-        <div className="mb-4 px-3 py-2 border-2 border-red-600/50 bg-red-900/20">
-          <p className="font-pixel text-[7px] text-red-400">{error}</p>
+        <div className="mb-4 px-4 py-3 border-2 border-red-600/50 bg-red-900/20">
+          <p className="font-pixel text-[10px] text-red-400">{error}</p>
         </div>
       )}
 
@@ -302,7 +302,7 @@ export default function MembersPage() {
               key={f}
               onClick={() => setFilter(f)}
               className={`
-                font-pixel text-[7px] px-3 py-1.5 border-2 transition-all
+                font-pixel text-[10px] px-4 py-2 border-2 transition-all
                 ${filter === f
                   ? "bg-pixel-accent/20 border-pixel-accent text-pixel-accent"
                   : "border-pixel-panel text-pixel-muted hover:text-pixel-text"
@@ -435,16 +435,16 @@ function MemberCard({
         {/* Info */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
-            <h3 className="font-pixel text-[9px] text-pixel-text truncate">{member.name}</h3>
+            <h3 className="font-pixel text-[12px] text-pixel-text truncate">{member.name}</h3>
             <Badge status={member.status} size="sm" showLabel={false} />
           </div>
-          <p className="font-pixel text-[6px] text-pixel-muted mb-1 truncate">
+          <p className="font-pixel text-[9px] text-pixel-muted mb-1 truncate">
             Discord: {member.discordId}
           </p>
-          <p className="font-pixel text-[6px] text-pixel-muted mb-1">
+          <p className="font-pixel text-[9px] text-pixel-muted mb-1">
             Sprite: {member.sprite}
           </p>
-          <p className="font-pixel text-[6px] text-pixel-muted">
+          <p className="font-pixel text-[9px] text-pixel-muted">
             Desk: {deskLabel ?? "Unassigned"}
           </p>
         </div>
@@ -787,7 +787,7 @@ function MemberForm({
 
       {/* Sprite selector */}
       <div className="flex flex-col gap-1">
-        <label className="font-pixel text-[8px] text-pixel-muted uppercase">Character Sprite</label>
+        <label className="font-pixel text-[11px] text-pixel-muted uppercase">Character Sprite</label>
         <div className="grid grid-cols-6 gap-2">
           {SPRITE_OPTIONS.map((s) => {
             const sc = SPRITE_COLORS[s];
@@ -810,13 +810,13 @@ function MemberForm({
             );
           })}
         </div>
-        <span className="font-pixel text-[6px] text-pixel-muted">{sprite}</span>
+        <span className="font-pixel text-[9px] text-pixel-muted">{sprite}</span>
       </div>
 
       {/* Accessories */}
       <div className="grid grid-cols-2 gap-3">
         <div className="flex flex-col gap-1">
-          <label className="font-pixel text-[8px] text-pixel-muted uppercase">Hat</label>
+          <label className="font-pixel text-[11px] text-pixel-muted uppercase">Hat</label>
           <select
             value={hat}
             onChange={(e) => onHatChange(e.target.value)}
@@ -828,7 +828,7 @@ function MemberForm({
           </select>
         </div>
         <div className="flex flex-col gap-1">
-          <label className="font-pixel text-[8px] text-pixel-muted uppercase">Glasses</label>
+          <label className="font-pixel text-[11px] text-pixel-muted uppercase">Glasses</label>
           <select
             value={glasses}
             onChange={(e) => onGlassesChange(e.target.value)}
@@ -843,20 +843,20 @@ function MemberForm({
 
       {/* Colors */}
       <div className="flex flex-col gap-2">
-        <label className="font-pixel text-[8px] text-pixel-muted uppercase">Colors</label>
+        <label className="font-pixel text-[11px] text-pixel-muted uppercase">Colors</label>
         <div className="grid grid-cols-3 gap-2">
           <div className="flex flex-col gap-1">
-            <span className="font-pixel text-[6px] text-pixel-muted">Shirt</span>
+            <span className="font-pixel text-[9px] text-pixel-muted">Shirt</span>
             <input type="color" value={colorShirt} onChange={(e) => onColorShirtChange(e.target.value)}
               className="w-full h-7 border-2 border-pixel-panel cursor-pointer bg-transparent" />
           </div>
           <div className="flex flex-col gap-1">
-            <span className="font-pixel text-[6px] text-pixel-muted">Hair</span>
+            <span className="font-pixel text-[9px] text-pixel-muted">Hair</span>
             <input type="color" value={colorHair} onChange={(e) => onColorHairChange(e.target.value)}
               className="w-full h-7 border-2 border-pixel-panel cursor-pointer bg-transparent" />
           </div>
           <div className="flex flex-col gap-1">
-            <span className="font-pixel text-[6px] text-pixel-muted">Skin</span>
+            <span className="font-pixel text-[9px] text-pixel-muted">Skin</span>
             <input type="color" value={colorSkin} onChange={(e) => onColorSkinChange(e.target.value)}
               className="w-full h-7 border-2 border-pixel-panel cursor-pointer bg-transparent" />
           </div>
@@ -865,7 +865,7 @@ function MemberForm({
 
       {/* Desk assignment */}
       <div className="flex flex-col gap-1">
-        <label className="font-pixel text-[8px] text-pixel-muted uppercase">Assign to Desk</label>
+        <label className="font-pixel text-[11px] text-pixel-muted uppercase">Assign to Desk</label>
         <select
           value={deskId}
           onChange={(e) => onDeskIdChange(e.target.value)}
@@ -890,7 +890,7 @@ function MemberForm({
 
       {/* Right: live character preview */}
       <div className="hidden sm:flex flex-col items-center gap-2 shrink-0">
-        <p className="font-pixel text-[6px] text-pixel-muted uppercase">Preview</p>
+        <p className="font-pixel text-[9px] text-pixel-muted uppercase">Preview</p>
         <CharacterPreview
           sprite={sprite}
           color={previewColor}
@@ -904,10 +904,10 @@ function MemberForm({
         />
         <div className="flex flex-col items-center gap-0.5">
           {hat !== "none" && (
-            <span className="font-pixel text-[5px] text-pixel-accent">{hat}</span>
+            <span className="font-pixel text-[8px] text-pixel-accent">{hat}</span>
           )}
           {glasses !== "none" && (
-            <span className="font-pixel text-[5px] text-pixel-accent">{glasses}</span>
+            <span className="font-pixel text-[8px] text-pixel-accent">{glasses}</span>
           )}
         </div>
       </div>

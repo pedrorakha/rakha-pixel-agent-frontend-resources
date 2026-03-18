@@ -17,6 +17,7 @@ import { Desk } from "@/types/office";
 import { DiscordStatus } from "@/types/discord";
 import { GameState } from "./types";
 import { Tilemap } from "./tilemap";
+import { ChatBubble } from "@/stores/chat-store";
 
 export class Renderer {
   private tilemap: Tilemap;
@@ -37,7 +38,10 @@ export class Renderer {
     state: GameState,
     desks: Desk[],
     characters: Character[],
-    presenceMap: Map<string, DiscordStatus>
+    presenceMap: Map<string, DiscordStatus>,
+    localPlayerId?: string | null,
+    chatBubbles?: ChatBubble[],
+    onlinePlayers?: Set<string>
   ): void {
     const ctx = this.ctx;
     if (!ctx) return;
@@ -66,8 +70,78 @@ export class Renderer {
     const sortedChars = [...characters].sort((a, b) => a.gridY - b.gridY);
     for (const char of sortedChars) {
       const status = presenceMap.get(char.discordId) ?? "offline";
+      const isLocalPlayer = char.id === localPlayerId;
+      const isRemoteOnline = !isLocalPlayer && onlinePlayers?.has(char.id);
+
+      // Indicador visual — vermelho para local, cinza para outros online
+      if (isLocalPlayer) {
+        this.renderPlayerIndicator(ctx, state, char, "#e94560", "rgba(233, 69, 96, 0.25)");
+      } else if (isRemoteOnline) {
+        this.renderPlayerIndicator(ctx, state, char, "#95a5a6", "rgba(149, 165, 166, 0.2)");
+      }
+
       this.renderCharacter(ctx, state, char, status);
     }
+
+    // Layer 5: Chat bubbles (acima de tudo)
+    if (chatBubbles && chatBubbles.length > 0) {
+      // Agrupa bolhas por memberId (mostra apenas a mais recente por personagem)
+      const latestByMember = new Map<string, ChatBubble>();
+      for (const bubble of chatBubbles) {
+        const existing = latestByMember.get(bubble.memberId);
+        if (!existing || bubble.timestamp > existing.timestamp) {
+          latestByMember.set(bubble.memberId, bubble);
+        }
+      }
+
+      latestByMember.forEach((bubble) => {
+        const char = characters.find((c) => c.id === bubble.memberId);
+        if (!char) return;
+        this.renderChatBubble(ctx, state, char, bubble);
+      });
+    }
+  }
+
+  private renderPlayerIndicator(
+    ctx: CanvasRenderingContext2D,
+    state: GameState,
+    character: Character,
+    arrowColor: string,
+    shadowColor: string
+  ): void {
+    const px = character.gridX * TILE_SIZE;
+    const py = character.gridY * TILE_SIZE;
+    const { x, y } = this.worldToScreen(state, px, py);
+    const zoom = state.camera.zoom;
+    const ts = TILE_SIZE * zoom;
+
+    // Sombra circular sob o personagem
+    ctx.fillStyle = shadowColor;
+    ctx.beginPath();
+    ctx.ellipse(
+      x + ts / 2,
+      y + ts - 2 * zoom,
+      ts * 0.45,
+      ts * 0.2,
+      0,
+      0,
+      Math.PI * 2
+    );
+    ctx.fill();
+
+    // Seta pulsante acima do personagem
+    const pulse = Math.sin(state.time * 4) * 2 * zoom;
+    const arrowX = x + ts / 2;
+    const arrowY = y - 14 * zoom + pulse;
+    const arrowSize = 3 * zoom;
+
+    ctx.fillStyle = arrowColor;
+    ctx.beginPath();
+    ctx.moveTo(arrowX, arrowY + arrowSize);
+    ctx.lineTo(arrowX - arrowSize, arrowY);
+    ctx.lineTo(arrowX + arrowSize, arrowY);
+    ctx.closePath();
+    ctx.fill();
   }
 
   private worldToScreen(
@@ -276,6 +350,100 @@ export class Renderer {
     }
   }
 
+  private renderChatBubble(
+    ctx: CanvasRenderingContext2D,
+    state: GameState,
+    character: Character,
+    bubble: ChatBubble
+  ): void {
+    const px = character.gridX * TILE_SIZE;
+    const py = character.gridY * TILE_SIZE;
+    const { x, y } = this.worldToScreen(state, px, py);
+    const zoom = state.camera.zoom;
+    const ts = TILE_SIZE * zoom;
+
+    const fontSize = Math.max(6, 6 * zoom);
+    ctx.font = `${fontSize}px "Press Start 2P", monospace`;
+
+    // Mede texto e quebra em linhas
+    const maxLineWidth = 120 * zoom;
+    const words = bubble.message.split(" ");
+    const lines: string[] = [];
+    let currentLine = "";
+
+    for (const word of words) {
+      const testLine = currentLine ? `${currentLine} ${word}` : word;
+      const width = ctx.measureText(testLine).width;
+      if (width > maxLineWidth && currentLine) {
+        lines.push(currentLine);
+        currentLine = word;
+      } else {
+        currentLine = testLine;
+      }
+    }
+    if (currentLine) lines.push(currentLine);
+
+    const lineHeight = fontSize + 2 * zoom;
+    const paddingX = 6 * zoom;
+    const paddingY = 4 * zoom;
+
+    // Calcula tamanho do balao
+    let bubbleWidth = 0;
+    for (const line of lines) {
+      const w = ctx.measureText(line).width;
+      if (w > bubbleWidth) bubbleWidth = w;
+    }
+    bubbleWidth += paddingX * 2;
+    const bubbleHeight = lines.length * lineHeight + paddingY * 2;
+
+    // Posicao do balao (acima do personagem, flutuando)
+    const age = Date.now() - bubble.timestamp;
+    const floatUp = Math.min(age / 200, 8) * zoom; // sobe suavemente
+    const bubbleX = x + ts / 2 - bubbleWidth / 2;
+    const bubbleY = y - bubbleHeight - 20 * zoom - floatUp - (character.jumpOffset * zoom);
+
+    ctx.globalAlpha = bubble.opacity;
+
+    // Fundo do balao
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(bubbleX, bubbleY, bubbleWidth, bubbleHeight);
+
+    // Borda pixel
+    ctx.strokeStyle = "#1a1a2e";
+    ctx.lineWidth = zoom;
+    ctx.strokeRect(bubbleX, bubbleY, bubbleWidth, bubbleHeight);
+
+    // Pontinha triangular (seta apontando para baixo)
+    const tipX = x + ts / 2;
+    const tipY = bubbleY + bubbleHeight;
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.moveTo(tipX - 4 * zoom, tipY);
+    ctx.lineTo(tipX + 4 * zoom, tipY);
+    ctx.lineTo(tipX, tipY + 5 * zoom);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Cobre a borda do fundo onde a ponta se conecta
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(tipX - 3 * zoom, tipY - zoom, 6 * zoom, zoom * 2);
+
+    // Texto
+    ctx.fillStyle = "#1a1a2e";
+    ctx.textAlign = "center";
+    for (let i = 0; i < lines.length; i++) {
+      ctx.fillText(
+        lines[i],
+        bubbleX + bubbleWidth / 2,
+        bubbleY + paddingY + (i + 1) * lineHeight - 2 * zoom
+      );
+    }
+    ctx.textAlign = "start";
+
+    ctx.globalAlpha = 1;
+  }
+
   private renderCharacter(
     ctx: CanvasRenderingContext2D,
     state: GameState,
@@ -290,7 +458,7 @@ export class Renderer {
     const cw = CHARACTER_WIDTH * zoom;
     const ch = CHARACTER_HEIGHT * zoom;
     const cx = x + (TILE_SIZE * zoom - cw) / 2;
-    const cy = y + (TILE_SIZE * zoom - ch);
+    const cy = y + (TILE_SIZE * zoom - ch) - (character.jumpOffset * zoom);
 
     const animFrame = character.animationFrame;
     const charState = character.state;
@@ -318,6 +486,9 @@ export class Renderer {
         break;
       case "idle":
         this.drawIdleCharacter(ctx, cx, cy, cw, ch, zoom, character.color, animFrame);
+        break;
+      case "dancing":
+        this.drawDancingCharacter(ctx, cx, cy, cw, ch, zoom, character.color, animFrame, state.time);
         break;
     }
 
@@ -756,6 +927,75 @@ export class Renderer {
     ctx.fillStyle = this.skinColor;
     ctx.fillRect(x - 1 * zoom, y + h * 0.4, 2 * zoom, 5 * zoom);
     ctx.fillRect(x + w - 1 * zoom, y + h * 0.4, 2 * zoom, 5 * zoom);
+  }
+
+  private drawDancingCharacter(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    zoom: number,
+    color: string,
+    frame: number,
+    time: number
+  ): void {
+    // Bounce lateral e vertical para dar sensacao de danca
+    const phase = frame % 4;
+    const bounceY = phase % 2 === 0 ? -2 * zoom : 0;
+    const leanX = phase < 2 ? -1.5 * zoom : 1.5 * zoom;
+
+    this.drawPixelBody(ctx, x + leanX, y + bounceY, w, h, zoom, color);
+
+    // Bracos em posicoes de danca — alternam entre cima e lado
+    ctx.fillStyle = this.skinColor;
+    if (phase === 0) {
+      // Braco esquerdo levantado, direito no quadril
+      ctx.fillRect(x + leanX - 2 * zoom, y + bounceY + h * 0.2, 2 * zoom, 4 * zoom);
+      ctx.fillRect(x + leanX + w - 1 * zoom, y + bounceY + h * 0.5, 2 * zoom, 4 * zoom);
+    } else if (phase === 1) {
+      // Ambos levantados
+      ctx.fillRect(x + leanX - 2 * zoom, y + bounceY + h * 0.15, 2 * zoom, 4 * zoom);
+      ctx.fillRect(x + leanX + w, y + bounceY + h * 0.15, 2 * zoom, 4 * zoom);
+    } else if (phase === 2) {
+      // Braco direito levantado, esquerdo no quadril
+      ctx.fillRect(x + leanX - 1 * zoom, y + bounceY + h * 0.5, 2 * zoom, 4 * zoom);
+      ctx.fillRect(x + leanX + w, y + bounceY + h * 0.2, 2 * zoom, 4 * zoom);
+    } else {
+      // Ambos levantados (invertido)
+      ctx.fillRect(x + leanX - 2 * zoom, y + bounceY + h * 0.2, 2 * zoom, 4 * zoom);
+      ctx.fillRect(x + leanX + w, y + bounceY + h * 0.2, 2 * zoom, 4 * zoom);
+    }
+
+    // Pernas alternando
+    ctx.fillStyle = COLORS.pants;
+    const legSwing = phase % 2 === 0 ? 1 : -1;
+    ctx.fillRect(
+      x + leanX + 2 * zoom + legSwing * zoom,
+      y + bounceY + h * 0.75,
+      3 * zoom,
+      h * 0.25
+    );
+    ctx.fillRect(
+      x + leanX + w - 5 * zoom - legSwing * zoom,
+      y + bounceY + h * 0.75,
+      3 * zoom,
+      h * 0.25
+    );
+
+    // Notas musicais flutuando
+    ctx.fillStyle = "#f1c40f";
+    ctx.globalAlpha = 0.7;
+    ctx.font = `${Math.max(6, 6 * zoom)}px "Press Start 2P", monospace`;
+    ctx.textAlign = "center";
+    const notePhase = Math.floor(time * 3) % 4;
+    const noteY1 = y + bounceY - (6 + notePhase * 2) * zoom;
+    const noteY2 = y + bounceY - (10 + ((notePhase + 2) % 4) * 2) * zoom;
+    ctx.fillText("♪", x + leanX - 2 * zoom, noteY1);
+    ctx.fillStyle = "#e94560";
+    ctx.fillText("♫", x + leanX + w + 4 * zoom, noteY2);
+    ctx.globalAlpha = 1;
+    ctx.textAlign = "start";
   }
 
   private renderCoffeeArea(

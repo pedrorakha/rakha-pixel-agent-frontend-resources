@@ -120,8 +120,8 @@ export default function DashboardOverview() {
     <div>
       {/* Header */}
       <div className="mb-8">
-        <h1 className="font-pixel text-sm text-pixel-accent">DASHBOARD</h1>
-        <p className="font-pixel text-[7px] text-pixel-muted mt-1">
+        <h1 className="font-pixel text-base text-pixel-accent">DASHBOARD</h1>
+        <p className="font-pixel text-[10px] text-pixel-muted mt-1">
           Overview of your virtual office
         </p>
       </div>
@@ -161,29 +161,29 @@ export default function DashboardOverview() {
       </div>
 
       {/* Recent activity */}
-      <section className="bg-pixel-surface border-4 border-pixel-panel p-4">
-        <h2 className="font-pixel text-[10px] text-pixel-text mb-4">MEMBERS STATUS</h2>
-        <div className="flex flex-col gap-2">
+      <section className="bg-pixel-surface border-4 border-pixel-panel p-5">
+        <h2 className="font-pixel text-[13px] text-pixel-text mb-4">MEMBERS STATUS</h2>
+        <div className="flex flex-col gap-2.5">
           {members.length === 0 && (
-            <p className="font-pixel text-[8px] text-pixel-muted py-4 text-center">
+            <p className="font-pixel text-[11px] text-pixel-muted py-4 text-center">
               No members yet. Add members to get started.
             </p>
           )}
           {members.map((member) => (
             <div
               key={member.id}
-              className="flex items-center justify-between bg-pixel-bg/50 border-2 border-pixel-panel/50 px-3 py-2"
+              className="flex items-center justify-between bg-pixel-bg/50 border-2 border-pixel-panel/50 px-4 py-3"
             >
               <div className="flex items-center gap-3">
                 <div
-                  className="w-6 h-6 border-2 border-white/20"
+                  className="w-7 h-7 border-2 border-white/20"
                   style={{ backgroundColor: member.color }}
                 />
                 <div>
-                  <span className="font-pixel text-[8px] text-pixel-text block">
+                  <span className="font-pixel text-[11px] text-pixel-text block">
                     {member.name}
                   </span>
-                  <span className="font-pixel text-[6px] text-pixel-muted">
+                  <span className="font-pixel text-[9px] text-pixel-muted">
                     {member.deskLabel ?? "No desk assigned"}
                   </span>
                 </div>
@@ -199,9 +199,9 @@ export default function DashboardOverview() {
 
 function StatCard({ label, value, color }: { label: string; value: number; color: string }) {
   return (
-    <div className="bg-pixel-surface border-4 border-pixel-panel p-4 text-center">
-      <div className={`font-pixel text-xl ${color}`}>{value}</div>
-      <div className="font-pixel text-[6px] text-pixel-muted mt-2">{label}</div>
+    <div className="bg-pixel-surface border-4 border-pixel-panel p-5 text-center">
+      <div className={`font-pixel text-2xl ${color}`}>{value}</div>
+      <div className="font-pixel text-[9px] text-pixel-muted mt-2">{label}</div>
     </div>
   );
 }
@@ -222,11 +222,11 @@ function QuickAction({
       href={href}
       className="block bg-pixel-surface border-4 border-pixel-panel p-4 hover:border-pixel-accent transition-colors group"
     >
-      <span className="font-pixel text-[12px] text-pixel-muted group-hover:text-pixel-accent transition-colors">
+      <span className="font-pixel text-[15px] text-pixel-muted group-hover:text-pixel-accent transition-colors">
         {icon}
       </span>
-      <h3 className="font-pixel text-[9px] text-pixel-text mt-2">{title}</h3>
-      <p className="font-pixel text-[6px] text-pixel-muted mt-1">{description}</p>
+      <h3 className="font-pixel text-[12px] text-pixel-text mt-2">{title}</h3>
+      <p className="font-pixel text-[9px] text-pixel-muted mt-1">{description}</p>
     </Link>
   );
 }

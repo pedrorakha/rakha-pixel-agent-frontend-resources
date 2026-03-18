@@ -5,6 +5,16 @@ import { useCanvas } from "@/hooks/use-canvas";
 import { useGameLoop } from "@/hooks/use-game-loop";
 import { useOfficeStore } from "@/stores/office-store";
 import { useDiscordStore } from "@/stores/discord-store";
+import { usePlayerStore } from "@/stores/player-store";
+import { useChatStore } from "@/stores/chat-store";
+import { usePlayerMovement } from "@/hooks/use-player-movement";
+import {
+  useMultiplayerSync,
+  PlayerMovePayload,
+  PlayerJumpPayload,
+  PlayerLeavePayload,
+  ChatMessagePayload,
+} from "@/hooks/use-multiplayer-sync";
 import { Renderer, updateCharacterAnimations } from "@/engine/renderer";
 import { Tilemap } from "@/engine/tilemap";
 import { GameState } from "@/engine/types";
@@ -71,6 +81,10 @@ const API_DIRECTION_MAP: Record<string, "up" | "down" | "left" | "right"> = {
   west: "left",
 };
 
+// Constantes do pulo
+const JUMP_VELOCITY = 18; // pixels de altura maxima
+const JUMP_GRAVITY = 80;  // gravidade (pixels/s^2)
+
 export function OfficeCanvas() {
   const { canvasRef, ctx, size } = useCanvas();
   const {
@@ -87,17 +101,265 @@ export function OfficeCanvas() {
     setDesks,
   } = useOfficeStore();
   const presences = useDiscordStore((s) => s.presences);
+  const selectedMemberId = usePlayerStore((s) => s.selectedMemberId);
+  const selectedMemberName = usePlayerStore((s) => s.selectedMemberName);
+  const chatBubbles = useChatStore((s) => s.bubbles);
+  const chatHistory = useChatStore((s) => s.history);
+  const addBubble = useChatStore((s) => s.addBubble);
+  const updateBubbles = useChatStore((s) => s.updateBubbles);
 
   const [characters, setCharacters] = useState<Character[]>([]);
   const [presenceMap, setPresenceMap] = useState<Map<string, DiscordStatus>>(new Map());
+  const [chatInput, setChatInput] = useState("");
+  const [chatFocused, setChatFocused] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [charMenu, setCharMenu] = useState<{ screenX: number; screenY: number } | null>(null);
+  const chatInputRef = useRef<HTMLInputElement>(null);
+  const historyEndRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<Renderer | null>(null);
   const tilemapRef = useRef<Tilemap | null>(null);
   const charactersRef = useRef<Character[]>(characters);
+
+  // Auto-scroll historico quando nova mensagem chega
+  useEffect(() => {
+    if (historyOpen) {
+      historyEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [chatHistory.length, historyOpen]);
+
+  // Refs para evitar stale closures no game loop
+  const selectedMemberIdRef = useRef(selectedMemberId);
+  selectedMemberIdRef.current = selectedMemberId;
+
+  const chatFocusedRef = useRef(chatFocused);
+  chatFocusedRef.current = chatFocused;
+
+  // Track jump velocity per character
+  const jumpVelocitiesRef = useRef<Map<string, number>>(new Map());
+
+  // Track se o mouse moveu durante o drag
+  const mouseDraggedRef = useRef(false);
+  const mouseDownPosRef = useRef<{ x: number; y: number } | null>(null);
 
   // Keep ref in sync
   useEffect(() => {
     charactersRef.current = characters;
   }, [characters]);
+
+  // --- Multiplayer callbacks ---
+
+  const handleRemoteMove = useCallback(
+    (payload: PlayerMovePayload) => {
+      setCharacters((prev) =>
+        prev.map((char) => {
+          if (char.id !== payload.memberId) return char;
+          return {
+            ...char,
+            gridX: payload.gridX,
+            gridY: payload.gridY,
+            direction: payload.direction,
+            state: payload.state,
+            animationFrame: 0,
+            animationTimer: 0,
+          };
+        })
+      );
+    },
+    []
+  );
+
+  const handleRemoteJump = useCallback(
+    (payload: PlayerJumpPayload) => {
+      jumpVelocitiesRef.current.set(payload.memberId, JUMP_VELOCITY);
+    },
+    []
+  );
+
+  const handleChatMessage = useCallback(
+    (payload: ChatMessagePayload) => {
+      addBubble({
+        id: payload.id,
+        memberId: payload.memberId,
+        memberName: payload.memberName,
+        message: payload.message,
+        timestamp: payload.timestamp,
+      });
+    },
+    [addBubble]
+  );
+
+  // Jogador saiu — retorna personagem a posicao baseada no Discord status
+  const handlePlayerLeave = useCallback(
+    (payload: PlayerLeavePayload) => {
+      setCharacters((prev) =>
+        prev.map((char) => {
+          if (char.id !== payload.memberId) return char;
+
+          const presence = presences.get(char.discordId);
+          const status = presence?.status ?? "offline";
+          const newState = STATUS_TO_STATE[status];
+
+          let newX = char.gridX;
+          let newY = char.gridY;
+          let newDir = char.direction;
+
+          if (char.deskId) {
+            const desk = storeDesks.find((d) => d.id === char.deskId);
+            let roomIndex = -1;
+            if (desk) {
+              for (let ri = 0; ri < ROOMS.length; ri++) {
+                const room = ROOMS[ri];
+                if (desk.gridX >= room.x && desk.gridX < room.x + room.w &&
+                    desk.gridY >= room.y && desk.gridY < room.y + room.h) {
+                  roomIndex = ri;
+                  break;
+                }
+              }
+            }
+            const roomFurn = roomIndex >= 0 ? ROOM_FURNITURE[roomIndex] : null;
+
+            if (status === "offline" && roomFurn) {
+              newX = roomFurn.bed.x + 1;
+              newY = roomFurn.bed.y;
+              newDir = "right";
+            } else if (status === "idle" && roomFurn) {
+              newX = roomFurn.coffee.x;
+              newY = roomFurn.coffee.y + 1;
+              newDir = "right";
+            } else if (desk) {
+              newX = desk.gridX;
+              newY = desk.gridY + 1;
+              newDir = "down";
+            }
+          }
+
+          return {
+            ...char,
+            state: newState,
+            gridX: newX,
+            gridY: newY,
+            direction: newDir,
+            animationFrame: 0,
+            animationTimer: 0,
+            jumpOffset: 0,
+          };
+        })
+      );
+    },
+    [presences, storeDesks]
+  );
+
+  const { emitMove, emitJump, emitChat, onlinePlayers } = useMultiplayerSync({
+    playerId: selectedMemberId,
+    onRemoteMove: handleRemoteMove,
+    onRemoteJump: handleRemoteJump,
+    onChatMessage: handleChatMessage,
+    onPlayerLeave: handlePlayerLeave,
+  });
+
+  // Callback quando o jogador local se move
+  const handlePlayerMove = useCallback(
+    (gridX: number, gridY: number, direction: Character["direction"]) => {
+      // Mover cancela danca e fecha menu
+      setCharMenu(null);
+      setCharacters((prev) =>
+        prev.map((char) => {
+          if (char.id !== selectedMemberIdRef.current) return char;
+          return {
+            ...char,
+            gridX,
+            gridY,
+            direction,
+            state: "walking" as const,
+            animationFrame: 0,
+            animationTimer: 0,
+          };
+        })
+      );
+      emitMove(gridX, gridY, direction, "walking");
+    },
+    [emitMove]
+  );
+
+  // Toggle danca
+  const handleToggleDance = useCallback(() => {
+    const playerChar = charactersRef.current.find(
+      (c) => c.id === selectedMemberIdRef.current
+    );
+    if (!playerChar) return;
+
+    const isDancing = playerChar.state === "dancing";
+    const newState = isDancing ? "idle" as const : "dancing" as const;
+
+    setCharacters((prev) =>
+      prev.map((char) => {
+        if (char.id !== selectedMemberIdRef.current) return char;
+        return { ...char, state: newState, animationFrame: 0, animationTimer: 0 };
+      })
+    );
+    emitMove(playerChar.gridX, playerChar.gridY, playerChar.direction, newState);
+    setCharMenu(null);
+  }, [emitMove]);
+
+  // Hook de movimentacao do jogador
+  const { updateMovement, handleClickMove, hasActiveInput } = usePlayerMovement({
+    playerId: selectedMemberId,
+    tilemap: tilemapRef.current,
+    desks: storeDesks,
+    characters,
+    onMove: handlePlayerMove,
+  });
+
+  // --- Space bar jump + Enter chat ---
+  useEffect(() => {
+    if (!selectedMemberId) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignora se um elemento interativo esta focado
+      const tag = (e.target as HTMLElement)?.tagName;
+      const isInputFocused = tag === "INPUT" || tag === "TEXTAREA" || tag === "BUTTON";
+
+      if (e.code === "Space" && !isInputFocused) {
+        e.preventDefault();
+        const char = charactersRef.current.find(
+          (c) => c.id === selectedMemberIdRef.current
+        );
+        if (!char || char.jumpOffset > 0) return; // Ja esta pulando
+
+        jumpVelocitiesRef.current.set(char.id, JUMP_VELOCITY);
+
+        // Broadcast pulo
+        emitJump(char.gridX, char.gridY);
+      }
+
+      // Enter abre o chat (se nao esta no input)
+      if (e.code === "Enter" && !isInputFocused) {
+        e.preventDefault();
+        chatInputRef.current?.focus();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedMemberId, emitJump]);
+
+  // --- Chat submit ---
+  const handleChatSubmit = useCallback(
+    (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!chatInput.trim() || !selectedMemberId || !selectedMemberName) return;
+
+      const char = charactersRef.current.find(
+        (c) => c.id === selectedMemberId
+      );
+      if (!char) return;
+
+      emitChat(selectedMemberName, chatInput.trim(), char.gridX, char.gridY);
+      setChatInput("");
+      chatInputRef.current?.blur();
+    },
+    [chatInput, selectedMemberId, selectedMemberName, emitChat]
+  );
 
   // Fetch members and desks from API
   useEffect(() => {
@@ -116,7 +378,6 @@ export function OfficeCanvas() {
           (apiDesks ?? []).map((d) => [d.id, d])
         );
 
-        // Convert API desks to store Desk format and update the store
         const convertedDesks: Desk[] = (apiDesks ?? []).map((d) => ({
           id: d.id,
           gridX: d.grid_x,
@@ -129,13 +390,10 @@ export function OfficeCanvas() {
         }));
         setDesks(convertedDesks);
 
-        // Build presence map from API data
         const newPresenceMap = new Map<string, DiscordStatus>();
 
-        // Build a map: desk_id -> room index (to find which room a desk belongs to)
         const deskToRoom = new Map<string, number>();
         for (const apiDesk of (apiDesks ?? [])) {
-          // Find which room this desk is inside by checking position
           for (let ri = 0; ri < ROOMS.length; ri++) {
             const room = ROOMS[ri];
             if (apiDesk.grid_x >= room.x && apiDesk.grid_x < room.x + room.w &&
@@ -146,7 +404,6 @@ export function OfficeCanvas() {
           }
         }
 
-        // Map API members to Character objects
         let coffeeIndex = 0;
         let bedIndex = 0;
 
@@ -171,17 +428,14 @@ export function OfficeCanvas() {
               const roomFurn = roomIndex !== undefined ? ROOM_FURNITURE[roomIndex] : null;
 
               if (status === "offline" && roomFurn) {
-                // SLEEPING → go to bed in their room
                 gridX = roomFurn.bed.x + 1;
                 gridY = roomFurn.bed.y;
                 direction = "right";
               } else if (status === "idle" && roomFurn) {
-                // COFFEE → go to coffee corner in their room
                 gridX = roomFurn.coffee.x;
                 gridY = roomFurn.coffee.y + 1;
                 direction = "right";
               } else {
-                // ONLINE / DND → sit at desk
                 const deskDir = API_DIRECTION_MAP[desk.direction] ?? "down";
                 direction = deskDir;
                 gridX = desk.grid_x;
@@ -191,13 +445,11 @@ export function OfficeCanvas() {
                 else if (deskDir === "right") { gridX = desk.grid_x + 2; gridY = desk.grid_y; }
               }
             } else if (status === "idle" || status === "dnd") {
-              // No desk assigned → overflow coffee area
               gridX = COFFEE_AREA.x + (coffeeIndex % COFFEE_AREA.width);
               gridY = COFFEE_AREA.y + Math.floor(coffeeIndex / COFFEE_AREA.width);
               coffeeIndex++;
               direction = "right";
             } else {
-              // No desk assigned → overflow bed area
               gridX = BED_AREA.x + (bedIndex % BED_AREA.width);
               gridY = BED_AREA.y + Math.floor(bedIndex / BED_AREA.width);
               bedIndex++;
@@ -224,13 +476,14 @@ export function OfficeCanvas() {
               colorShirt: m.color_shirt || color,
               colorHair: m.color_hair || "#4a3728",
               colorSkin: m.color_skin || "#ffccaa",
+              jumpOffset: 0,
+              jumpTimer: 0,
             } satisfies Character;
           });
 
         setCharacters(chars);
         setPresenceMap(newPresenceMap);
       } catch (err) {
-        // Silently fail - canvas will just show empty office
         console.error("Failed to fetch office data:", err);
       }
     }
@@ -247,31 +500,31 @@ export function OfficeCanvas() {
     rendererRef.current = renderer;
   }, [layout]);
 
-  // Update renderer context when it changes
+  // Update renderer context
   useEffect(() => {
     if (ctx && rendererRef.current) {
       rendererRef.current.setContext(ctx);
     }
   }, [ctx]);
 
-  // Update character states AND positions in real-time when discord presence changes via WebSocket
+  // Update character states when discord presence changes (nao-controlados)
   useEffect(() => {
     if (presences.size === 0) return;
 
     setCharacters((prev) =>
       prev.map((char) => {
+        if (char.id === selectedMemberIdRef.current) return char;
+
         const presence = presences.get(char.discordId);
         if (!presence) return char;
         const newState = STATUS_TO_STATE[presence.status];
         if (newState === char.state) return char;
 
-        // Reposition character based on new status
         let newX = char.gridX;
         let newY = char.gridY;
         let newDir = char.direction;
 
         if (char.deskId) {
-          // Find which room this character's desk is in
           const desk = storeDesks.find((d) => d.id === char.deskId);
           let roomIndex = -1;
           if (desk) {
@@ -287,17 +540,14 @@ export function OfficeCanvas() {
           const roomFurn = roomIndex >= 0 ? ROOM_FURNITURE[roomIndex] : null;
 
           if (presence.status === "offline" && roomFurn) {
-            // Go to bed
             newX = roomFurn.bed.x + 1;
             newY = roomFurn.bed.y;
             newDir = "right";
           } else if (presence.status === "idle" && roomFurn) {
-            // Go to coffee
             newX = roomFurn.coffee.x;
             newY = roomFurn.coffee.y + 1;
             newDir = "right";
           } else if (desk) {
-            // Back to desk
             newX = desk.gridX;
             newY = desk.gridY + 1;
             newDir = "down";
@@ -316,7 +566,6 @@ export function OfficeCanvas() {
       })
     );
 
-    // Also update the presence map for rendering
     setPresenceMap((prev) => {
       const updated = new Map(prev);
       presences.forEach((p, discordId) => {
@@ -326,12 +575,81 @@ export function OfficeCanvas() {
     });
   }, [presences, storeDesks]);
 
+  // Idle timer
+  const idleTimerRef = useRef(0);
+  const IDLE_DELAY = 0.3;
+
   const update = useCallback(
     (deltaTime: number) => {
-      setCharacters((prev) => updateCharacterAnimations(prev, deltaTime));
+      // Atualiza animacoes
+      setCharacters((prev) => {
+        let updated = updateCharacterAnimations(prev, deltaTime);
+
+        // Atualiza pulo (fisica simples: parabola)
+        const velocities = jumpVelocitiesRef.current;
+        if (velocities.size > 0) {
+          updated = updated.map((char) => {
+            const vel = velocities.get(char.id);
+            if (vel === undefined && char.jumpOffset <= 0) return char;
+
+            const currentVel = vel ?? 0;
+            const newVel = currentVel - JUMP_GRAVITY * deltaTime;
+            const newOffset = Math.max(0, char.jumpOffset + newVel * deltaTime);
+
+            if (newOffset <= 0 && newVel < 0) {
+              // Aterrissou
+              velocities.delete(char.id);
+              return { ...char, jumpOffset: 0 };
+            }
+
+            velocities.set(char.id, newVel);
+            return { ...char, jumpOffset: newOffset };
+          });
+        }
+
+        return updated;
+      });
+
+      // Atualiza chat bubbles (fade)
+      updateBubbles(deltaTime);
+
+      // Movimentacao do jogador (ignora se chat focado)
+      if (!chatFocusedRef.current) {
+        const playerChar = charactersRef.current.find(
+          (c) => c.id === selectedMemberIdRef.current
+        );
+        updateMovement(deltaTime, playerChar);
+
+        // Idle revert
+        if (playerChar && playerChar.state === "walking") {
+          if (!hasActiveInput()) {
+            idleTimerRef.current += deltaTime;
+            if (idleTimerRef.current >= IDLE_DELAY) {
+              idleTimerRef.current = 0;
+              setCharacters((prev) =>
+                prev.map((char) => {
+                  if (char.id !== selectedMemberIdRef.current) return char;
+                  return { ...char, state: "idle" as const, animationFrame: 0, animationTimer: 0 };
+                })
+              );
+              if (playerChar) {
+                emitMove(playerChar.gridX, playerChar.gridY, playerChar.direction, "idle");
+              }
+            }
+          } else {
+            idleTimerRef.current = 0;
+          }
+        }
+      }
     },
-    []
+    [updateMovement, hasActiveInput, emitMove, updateBubbles]
   );
+
+  const chatBubblesRef = useRef(chatBubbles);
+  chatBubblesRef.current = chatBubbles;
+
+  const onlinePlayersRef = useRef(onlinePlayers);
+  onlinePlayersRef.current = onlinePlayers;
 
   const render = useCallback(
     (_deltaTime: number, time: number) => {
@@ -345,7 +663,6 @@ export function OfficeCanvas() {
         canvasHeight: size.height,
       };
 
-      // Build presence map - merge API data and live presences
       const mergedPresenceMap = new Map<string, DiscordStatus>(presenceMap);
       presences.forEach((p, discordId) => {
         mergedPresenceMap.set(discordId, p.status);
@@ -355,7 +672,10 @@ export function OfficeCanvas() {
         gameState,
         storeDesks,
         charactersRef.current,
-        mergedPresenceMap
+        mergedPresenceMap,
+        selectedMemberIdRef.current,
+        chatBubblesRef.current,
+        onlinePlayersRef.current
       );
     },
     [ctx, cameraX, cameraY, zoom, size, storeDesks, presences, presenceMap]
@@ -363,9 +683,13 @@ export function OfficeCanvas() {
 
   useGameLoop(update, render);
 
+  // --- Mouse/touch input handlers ---
+
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
       if (e.button === 0) {
+        mouseDownPosRef.current = { x: e.clientX, y: e.clientY };
+        mouseDraggedRef.current = false;
         startPan(e.clientX, e.clientY);
       }
     },
@@ -374,27 +698,75 @@ export function OfficeCanvas() {
 
   const handleMouseMove = useCallback(
     (e: React.MouseEvent) => {
+      if (mouseDownPosRef.current) {
+        const dx = Math.abs(e.clientX - mouseDownPosRef.current.x);
+        const dy = Math.abs(e.clientY - mouseDownPosRef.current.y);
+        if (dx > 4 || dy > 4) {
+          mouseDraggedRef.current = true;
+        }
+      }
       updatePan(e.clientX, e.clientY);
     },
     [updatePan]
   );
 
-  const handleMouseUp = useCallback(() => {
+  const handleMouseUp = useCallback(
+    (e: React.MouseEvent) => {
+      const wasDragging = mouseDraggedRef.current;
+      mouseDownPosRef.current = null;
+      mouseDraggedRef.current = false;
+      endPan();
+
+      if (!wasDragging && e.button === 0 && selectedMemberIdRef.current) {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+
+        const rect = canvas.getBoundingClientRect();
+        const clickX = e.clientX - rect.left;
+        const clickY = e.clientY - rect.top;
+
+        const { zoom: z, cameraX: cx, cameraY: cy } = useOfficeStore.getState();
+        const worldX = clickX / z + cx;
+        const worldY = clickY / z + cy;
+
+        const gridX = Math.floor(worldX / TILE_SIZE);
+        const gridY = Math.floor(worldY / TILE_SIZE);
+
+        if (gridX >= 0 && gridX < GRID_WIDTH && gridY >= 0 && gridY < GRID_HEIGHT) {
+          const playerChar = charactersRef.current.find(
+            (c) => c.id === selectedMemberIdRef.current
+          );
+          if (playerChar) {
+            // Clicou no proprio personagem — abre menu
+            if (gridX === playerChar.gridX && gridY === playerChar.gridY) {
+              setCharMenu({ screenX: e.clientX, screenY: e.clientY });
+              return;
+            }
+            // Clicou em outro lugar — fecha menu e move
+            setCharMenu(null);
+            handleClickMove(gridX, gridY, playerChar);
+          }
+        }
+      }
+    },
+    [endPan, handleClickMove, canvasRef]
+  );
+
+  const handleMouseLeave = useCallback(() => {
+    mouseDownPosRef.current = null;
+    mouseDraggedRef.current = false;
     endPan();
   }, [endPan]);
 
   const handleWheel = useCallback(
     (e: React.WheelEvent) => {
-      if (e.deltaY < 0) {
-        zoomIn();
-      } else {
-        zoomOut();
-      }
+      if (e.deltaY < 0) zoomIn();
+      else zoomOut();
     },
     [zoomIn, zoomOut]
   );
 
-  // Touch support for mobile (pan + pinch zoom)
+  // Touch support
   const lastTouchRef = useRef<{ x: number; y: number } | null>(null);
   const pinchDistRef = useRef<number | null>(null);
 
@@ -403,6 +775,8 @@ export function OfficeCanvas() {
       if (e.touches.length === 1) {
         const t = e.touches[0];
         lastTouchRef.current = { x: t.clientX, y: t.clientY };
+        mouseDownPosRef.current = { x: t.clientX, y: t.clientY };
+        mouseDraggedRef.current = false;
         startPan(t.clientX, t.clientY);
       } else if (e.touches.length === 2) {
         endPan();
@@ -419,6 +793,11 @@ export function OfficeCanvas() {
       e.preventDefault();
       if (e.touches.length === 1 && lastTouchRef.current) {
         const t = e.touches[0];
+        if (mouseDownPosRef.current) {
+          const dx = Math.abs(t.clientX - mouseDownPosRef.current.x);
+          const dy = Math.abs(t.clientY - mouseDownPosRef.current.y);
+          if (dx > 8 || dy > 8) mouseDraggedRef.current = true;
+        }
         updatePan(t.clientX, t.clientY);
         lastTouchRef.current = { x: t.clientX, y: t.clientY };
       } else if (e.touches.length === 2 && pinchDistRef.current !== null) {
@@ -437,10 +816,37 @@ export function OfficeCanvas() {
   );
 
   const handleTouchEnd = useCallback(() => {
+    if (!mouseDraggedRef.current && lastTouchRef.current && selectedMemberIdRef.current) {
+      const canvas = canvasRef.current;
+      if (canvas) {
+        const rect = canvas.getBoundingClientRect();
+        const clickX = lastTouchRef.current.x - rect.left;
+        const clickY = lastTouchRef.current.y - rect.top;
+
+        const { zoom: z, cameraX: cx, cameraY: cy } = useOfficeStore.getState();
+        const worldX = clickX / z + cx;
+        const worldY = clickY / z + cy;
+
+        const gridX = Math.floor(worldX / TILE_SIZE);
+        const gridY = Math.floor(worldY / TILE_SIZE);
+
+        if (gridX >= 0 && gridX < GRID_WIDTH && gridY >= 0 && gridY < GRID_HEIGHT) {
+          const playerChar = charactersRef.current.find(
+            (c) => c.id === selectedMemberIdRef.current
+          );
+          if (playerChar) {
+            handleClickMove(gridX, gridY, playerChar);
+          }
+        }
+      }
+    }
+
     lastTouchRef.current = null;
     pinchDistRef.current = null;
+    mouseDownPosRef.current = null;
+    mouseDraggedRef.current = false;
     endPan();
-  }, [endPan]);
+  }, [endPan, handleClickMove, canvasRef]);
 
   return (
     <div className="relative w-full h-full overflow-hidden bg-pixel-bg touch-none">
@@ -450,7 +856,7 @@ export function OfficeCanvas() {
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
+        onMouseLeave={handleMouseLeave}
         onWheel={handleWheel}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
@@ -458,21 +864,49 @@ export function OfficeCanvas() {
         onTouchCancel={handleTouchEnd}
       />
 
-      {/* Zoom controls overlay */}
-      <div className="absolute bottom-4 right-4 flex flex-col gap-2">
+      {/* Menu do personagem */}
+      {charMenu && (
+        <>
+          {/* Backdrop invisivel para fechar ao clicar fora */}
+          <div
+            className="fixed inset-0 z-30"
+            onClick={() => setCharMenu(null)}
+          />
+          <div
+            className="fixed z-40 bg-pixel-surface border-2 border-pixel-panel shadow-[3px_3px_0px_0px_rgba(0,0,0,0.5)]"
+            style={{
+              left: charMenu.screenX,
+              top: charMenu.screenY - 8,
+              transform: "translate(-50%, -100%)",
+            }}
+          >
+            <button
+              onClick={handleToggleDance}
+              className="w-full px-5 py-2.5 font-pixel text-[10px] text-pixel-text hover:bg-pixel-accent/20 hover:text-pixel-accent transition-colors whitespace-nowrap text-left"
+            >
+              {charactersRef.current.find((c) => c.id === selectedMemberId)?.state === "dancing"
+                ? "STOP DANCE"
+                : "DANCE"}
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* Zoom controls */}
+      <div className="absolute bottom-6 right-6 flex flex-col gap-2 z-20">
         <button
           onClick={zoomIn}
-          className="w-8 h-8 bg-pixel-surface border-2 border-pixel-panel text-pixel-text font-pixel text-sm flex items-center justify-center hover:bg-pixel-panel transition-colors"
+          className="w-10 h-10 bg-pixel-surface border-2 border-pixel-panel text-pixel-text font-pixel text-base flex items-center justify-center hover:bg-pixel-panel transition-colors"
           aria-label="Zoom in"
         >
           +
         </button>
-        <span className="w-8 h-8 bg-pixel-surface/80 border-2 border-pixel-panel text-pixel-text font-pixel text-[8px] flex items-center justify-center">
+        <span className="w-10 h-10 bg-pixel-surface/80 border-2 border-pixel-panel text-pixel-text font-pixel text-[11px] flex items-center justify-center">
           {zoom}x
         </span>
         <button
           onClick={zoomOut}
-          className="w-8 h-8 bg-pixel-surface border-2 border-pixel-panel text-pixel-text font-pixel text-sm flex items-center justify-center hover:bg-pixel-panel transition-colors"
+          className="w-10 h-10 bg-pixel-surface border-2 border-pixel-panel text-pixel-text font-pixel text-base flex items-center justify-center hover:bg-pixel-panel transition-colors"
           aria-label="Zoom out"
         >
           -
@@ -480,10 +914,91 @@ export function OfficeCanvas() {
       </div>
 
       {/* Connection status */}
-      <div className="absolute top-12 left-4">
-        <div className="flex items-center gap-2 bg-pixel-surface/80 border-2 border-pixel-panel px-3 py-1">
-          <span className="w-2 h-2 rounded-full bg-green-500 animate-pixel-blink" />
-          <span className="font-pixel text-[7px] text-pixel-muted">LIVE</span>
+      <div className="absolute top-14 left-6 z-20">
+        <div className="flex items-center gap-2 bg-pixel-surface/80 border-2 border-pixel-panel px-4 py-1.5">
+          <span className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pixel-blink" />
+          <span className="font-pixel text-[10px] text-pixel-muted">LIVE</span>
+        </div>
+      </div>
+
+      {/* Chat input — centro horizontal */}
+      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 w-full max-w-md px-6">
+        <form onSubmit={handleChatSubmit} className="flex gap-2">
+          <input
+            ref={chatInputRef}
+            type="text"
+            value={chatInput}
+            onChange={(e) => setChatInput(e.target.value)}
+            onFocus={() => setChatFocused(true)}
+            onBlur={() => setChatFocused(false)}
+            placeholder="Pressione Enter para falar..."
+            maxLength={200}
+            className="flex-1 px-4 py-2 font-pixel text-[10px] bg-pixel-surface/90 text-pixel-text border-2 border-pixel-panel focus:border-pixel-accent focus:outline-none placeholder:text-pixel-muted/40"
+          />
+          <button
+            type="submit"
+            disabled={!chatInput.trim()}
+            className="px-4 py-2 font-pixel text-[10px] bg-pixel-accent text-white border-2 border-pixel-accent/60 hover:bg-pixel-accent/80 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          >
+            SEND
+          </button>
+        </form>
+      </div>
+
+      {/* Painel esquerdo — historico + keybindings + (jukebox abaixo em z-50) */}
+      <div className="absolute bottom-20 left-6 z-20 flex flex-col gap-2 w-[260px]">
+        {/* Historico de chat (expandido) */}
+        {historyOpen && (
+          <div className="bg-pixel-surface/95 border-2 border-pixel-panel max-h-[240px] overflow-y-auto">
+            <div className="px-4 py-2.5 border-b border-pixel-panel/50 sticky top-0 bg-pixel-surface">
+              <span className="font-pixel text-[9px] text-pixel-muted uppercase">Chat</span>
+            </div>
+            {chatHistory.length === 0 ? (
+              <div className="px-4 py-4">
+                <span className="font-pixel text-[8px] text-pixel-muted">Nenhuma mensagem ainda</span>
+              </div>
+            ) : (
+              <div className="px-4 py-2">
+                {chatHistory.map((entry) => (
+                  <div key={entry.id} className="py-1.5 border-b border-pixel-panel/20 last:border-b-0">
+                    <span className="font-pixel text-[8px] text-pixel-accent">{entry.memberName}: </span>
+                    <span className="font-pixel text-[8px] text-pixel-text">{entry.message}</span>
+                  </div>
+                ))}
+                <div ref={historyEndRef} />
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Botao historico */}
+        <button
+          onClick={() => setHistoryOpen((v) => !v)}
+          className="w-full px-4 py-2 font-pixel text-[9px] bg-pixel-surface/80 text-pixel-muted border-2 border-pixel-panel hover:border-pixel-accent hover:text-pixel-accent transition-colors text-left"
+        >
+          {historyOpen ? "[X] FECHAR CHAT" : `[CHAT] ${chatHistory.length > 0 ? `(${chatHistory.length})` : ""}`}
+        </button>
+
+        {/* Keybindings */}
+        <div className="bg-pixel-surface/80 border-2 border-pixel-panel px-4 py-2.5">
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center gap-3">
+              <span className="font-pixel text-[8px] text-pixel-accent min-w-[70px]">WASD / Setas</span>
+              <span className="font-pixel text-[8px] text-pixel-muted">Mover</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="font-pixel text-[8px] text-pixel-accent min-w-[70px]">Click</span>
+              <span className="font-pixel text-[8px] text-pixel-muted">Andar ate</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="font-pixel text-[8px] text-pixel-accent min-w-[70px]">Espaco</span>
+              <span className="font-pixel text-[8px] text-pixel-muted">Pular</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="font-pixel text-[8px] text-pixel-accent min-w-[70px]">Enter</span>
+              <span className="font-pixel text-[8px] text-pixel-muted">Chat</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>

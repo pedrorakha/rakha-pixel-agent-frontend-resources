@@ -24,6 +24,7 @@ const STATES: { state: CharacterState; label: string; discordStatus: DiscordStat
   { state: "sleeping", label: "SLEEPING", discordStatus: "offline", description: "Offline - Resting in bed" },
   { state: "walking", label: "WALKING", discordStatus: "online", description: "Transitioning between areas" },
   { state: "idle", label: "IDLE", discordStatus: "online", description: "Standing still, waiting" },
+  { state: "dancing", label: "DANCING", discordStatus: "online", description: "Dancing with music notes" },
 ];
 
 export default function CharactersPage() {
@@ -44,8 +45,8 @@ export default function CharactersPage() {
     <div>
       {/* Header */}
       <div className="mb-6">
-        <h1 className="font-pixel text-sm text-pixel-accent">CHARACTERS</h1>
-        <p className="font-pixel text-[7px] text-pixel-muted mt-1">
+        <h1 className="font-pixel text-base text-pixel-accent">CHARACTERS</h1>
+        <p className="font-pixel text-[10px] text-pixel-muted mt-1">
           Preview and customize character sprites
         </p>
       </div>
@@ -53,7 +54,7 @@ export default function CharactersPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left: Sprite selector */}
         <section className="bg-pixel-surface border-4 border-pixel-panel p-4">
-          <h2 className="font-pixel text-[9px] text-pixel-text mb-4">CHOOSE CHARACTER</h2>
+          <h2 className="font-pixel text-[12px] text-pixel-text mb-4">CHOOSE CHARACTER</h2>
           <div className="grid grid-cols-2 gap-3">
             {SPRITES.map((sprite) => (
               <button
@@ -68,7 +69,7 @@ export default function CharactersPage() {
                 `}
               >
                 <MiniCharacterPreview shirt={sprite.shirt} hair={sprite.hair} skin={sprite.skin} />
-                <span className="font-pixel text-[6px] text-pixel-muted">{sprite.name}</span>
+                <span className="font-pixel text-[9px] text-pixel-muted">{sprite.name}</span>
               </button>
             ))}
           </div>
@@ -76,7 +77,7 @@ export default function CharactersPage() {
 
         {/* Center: Big animated preview */}
         <section className="bg-pixel-surface border-4 border-pixel-panel p-4 flex flex-col items-center">
-          <h2 className="font-pixel text-[9px] text-pixel-text mb-4">PREVIEW</h2>
+          <h2 className="font-pixel text-[12px] text-pixel-text mb-4">PREVIEW</h2>
 
           <BigCharacterPreview
             shirt={customShirt}
@@ -92,7 +93,7 @@ export default function CharactersPage() {
                 key={s.state}
                 onClick={() => setPreviewState(s.state)}
                 className={`
-                  font-pixel text-[6px] px-2 py-2 border-2 transition-all text-center
+                  font-pixel text-[9px] px-3 py-2.5 border-2 transition-all text-center
                   ${previewState === s.state
                     ? "border-pixel-accent bg-pixel-accent/20 text-pixel-accent"
                     : "border-pixel-panel text-pixel-muted hover:text-pixel-text"
@@ -106,7 +107,7 @@ export default function CharactersPage() {
 
           {/* State description */}
           <div className="mt-3 p-2 bg-pixel-bg/50 border-2 border-pixel-panel w-full">
-            <p className="font-pixel text-[7px] text-pixel-text text-center">
+            <p className="font-pixel text-[10px] text-pixel-text text-center">
               {STATES.find((s) => s.state === previewState)?.description}
             </p>
           </div>
@@ -114,7 +115,7 @@ export default function CharactersPage() {
 
         {/* Right: Customization */}
         <section className="bg-pixel-surface border-4 border-pixel-panel p-4">
-          <h2 className="font-pixel text-[9px] text-pixel-text mb-4">CUSTOMIZE COLORS</h2>
+          <h2 className="font-pixel text-[12px] text-pixel-text mb-4">CUSTOMIZE COLORS</h2>
 
           <div className="flex flex-col gap-4">
             <ColorPicker
@@ -156,7 +157,7 @@ export default function CharactersPage() {
 
           {/* Discord status legend */}
           <div className="mt-6 pt-4 border-t-2 border-pixel-panel/50">
-            <h3 className="font-pixel text-[8px] text-pixel-muted mb-3">DISCORD STATUS MAP</h3>
+            <h3 className="font-pixel text-[11px] text-pixel-muted mb-3">DISCORD STATUS MAP</h3>
             <div className="flex flex-col gap-2">
               {STATES.slice(0, 4).map((s) => (
                 <div key={s.state} className="flex items-center gap-2">
@@ -164,10 +165,10 @@ export default function CharactersPage() {
                     className="w-3 h-3 rounded-full shrink-0"
                     style={{ backgroundColor: STATUS_COLORS[s.discordStatus] }}
                   />
-                  <span className="font-pixel text-[6px] text-pixel-muted flex-1">
+                  <span className="font-pixel text-[9px] text-pixel-muted flex-1">
                     {s.discordStatus.toUpperCase()}
                   </span>
-                  <span className="font-pixel text-[6px] text-pixel-text">
+                  <span className="font-pixel text-[9px] text-pixel-text">
                     {s.label}
                   </span>
                 </div>
@@ -427,6 +428,31 @@ function drawCharacter(
       ctx.fillRect(x + w - 2, bodyY + 6, 4, 8);
       break;
     }
+    case "dancing": {
+      const phase = frame % 4;
+      const leanX2 = phase < 2 ? -2 : 2;
+      // Arms dancing
+      ctx.fillStyle = skin;
+      if (phase === 0 || phase === 3) {
+        ctx.fillRect(x - 3 + leanX2, bodyY - 2 + bounce, 4, 8);
+        ctx.fillRect(x + w - 1 + leanX2, bodyY + 4 + bounce, 4, 8);
+      } else {
+        ctx.fillRect(x - 3 + leanX2, bodyY + 4 + bounce, 4, 8);
+        ctx.fillRect(x + w - 1 + leanX2, bodyY - 2 + bounce, 4, 8);
+      }
+      // Notes
+      ctx.fillStyle = "#f1c40f";
+      ctx.globalAlpha = 0.7;
+      ctx.font = `8px "Press Start 2P", monospace`;
+      ctx.textAlign = "center";
+      const np = Math.floor(time * 3) % 4;
+      ctx.fillText("♪", x - 4, dy - 6 - np * 3);
+      ctx.fillStyle = "#e94560";
+      ctx.fillText("♫", x + w + 6, dy - 10 - ((np + 2) % 4) * 3);
+      ctx.globalAlpha = 1;
+      ctx.textAlign = "start";
+      break;
+    }
   }
 }
 
@@ -443,7 +469,7 @@ function ColorPicker({
 }) {
   return (
     <div className="flex flex-col gap-2">
-      <label className="font-pixel text-[8px] text-pixel-muted">{label}</label>
+      <label className="font-pixel text-[11px] text-pixel-muted">{label}</label>
       <div className="flex items-center gap-2">
         <input
           type="color"
