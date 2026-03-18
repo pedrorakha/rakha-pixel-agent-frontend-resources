@@ -46,8 +46,7 @@ export class Renderer {
     chatBubbles?: ChatBubble[],
     onlinePlayers?: Set<string>,
     reactions?: FloatingReaction[],
-    footprints?: Footprint[],
-    speakingPlayerIds?: Set<string>
+    footprints?: Footprint[]
   ): void {
     const ctx = this.ctx;
     if (!ctx) return;
@@ -95,11 +94,6 @@ export class Renderer {
       }
 
       this.renderCharacter(ctx, state, char, status);
-
-      // Indicador de voz (microfone ativo)
-      if (speakingPlayerIds?.has(char.id)) {
-        this.renderVoiceIndicator(ctx, state, char);
-      }
     }
 
     // Layer 5: Chat bubbles (acima de tudo)
@@ -195,33 +189,6 @@ export class Renderer {
       ctx.fillRect(x + ts * 0.55, y + ts * 0.55, 1.5 * zoom, 1.5 * zoom);
     }
     ctx.globalAlpha = 1;
-  }
-
-  private renderVoiceIndicator(
-    ctx: CanvasRenderingContext2D,
-    state: GameState,
-    character: Character
-  ): void {
-    const px = character.gridX * TILE_SIZE;
-    const py = character.gridY * TILE_SIZE;
-    const { x, y } = this.worldToScreen(state, px, py);
-    const zoom = state.camera.zoom;
-    const ts = TILE_SIZE * zoom;
-
-    // Borda brilhante ao redor do tile
-    const pulse = 0.5 + 0.5 * Math.sin(state.time * 6);
-    ctx.strokeStyle = `rgba(46, 204, 113, ${0.4 + pulse * 0.4})`;
-    ctx.lineWidth = 2 * zoom;
-    ctx.strokeRect(x + zoom, y + zoom, ts - 2 * zoom, ts - 2 * zoom);
-
-    // Icone de microfone acima e a esquerda
-    const micX = x - 2 * zoom;
-    const micY = y - 4 * zoom;
-    ctx.fillStyle = `rgba(46, 204, 113, ${0.7 + pulse * 0.3})`;
-    ctx.fillRect(micX, micY, 4 * zoom, 5 * zoom);
-    ctx.fillRect(micX + 1 * zoom, micY - 1 * zoom, 2 * zoom, 1 * zoom);
-    ctx.fillRect(micX + 0.5 * zoom, micY + 5 * zoom, 3 * zoom, 1 * zoom);
-    ctx.fillRect(micX + 1 * zoom, micY + 6 * zoom, 2 * zoom, 1 * zoom);
   }
 
   private renderReaction(

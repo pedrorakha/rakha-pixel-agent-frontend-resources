@@ -313,8 +313,10 @@ export function OfficeCanvas() {
     isJoining: voiceJoining,
     isMuted,
     participantCount,
+    participants: voiceParticipants,
     roomLabel: voiceRoomLabel,
     toggleMute,
+    toggleMuteParticipant,
   } = useVoiceChat({
     playerName: selectedMemberName,
     gridX: currentPlayerChar?.gridX ?? -1,
@@ -322,21 +324,6 @@ export function OfficeCanvas() {
     enabled: !!selectedMemberId,
     playersInSameRoom,
   });
-
-  // Set de jogadores em voice call (todos no mesmo quarto quando a call esta ativa)
-  const voiceInCall = isInCall && myRoom >= 0
-    ? new Set(
-        characters
-          .filter((c) => {
-            if (c.id === selectedMemberId) return true;
-            if (!onlinePlayers.has(c.id)) return false;
-            return detectRoom(c.gridX, c.gridY) === myRoom;
-          })
-          .map((c) => c.id)
-      )
-    : new Set<string>();
-  const voiceInCallRef = useRef(voiceInCall);
-  voiceInCallRef.current = voiceInCall;
 
   // Callback quando o jogador local se move
   const handlePlayerMove = useCallback(
@@ -801,8 +788,7 @@ export function OfficeCanvas() {
         chatBubblesRef.current,
         onlinePlayersRef.current,
         reactionsRef.current,
-        footprintsRef.current,
-        voiceInCallRef.current
+        footprintsRef.current
       );
     },
     [ctx, cameraX, cameraY, zoom, size, storeDesks, presences, presenceMap]
@@ -1078,9 +1064,36 @@ export function OfficeCanvas() {
             }`}
           >
             <span className="font-pixel text-[9px] text-pixel-text">
-              {isMuted ? "MIC OFF" : "MIC ON"}
+              {isMuted ? "🔇 MIC OFF" : "🎙️ MIC ON"}
             </span>
           </button>
+        )}
+        {/* Lista de participantes na call */}
+        {isInCall && voiceParticipants.length > 0 && (
+          <div className="bg-pixel-surface/90 border-2 border-pixel-panel px-3 py-2 flex flex-col gap-1 max-w-[180px]">
+            {voiceParticipants.map((p) => (
+              <div key={p.sessionId} className="flex items-center gap-2">
+                {p.isLocal ? (
+                  <span className="font-pixel text-[8px] text-pixel-accent">
+                    {isMuted ? "🔇" : "🎙️"}
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => toggleMuteParticipant(p.sessionId)}
+                    className="font-pixel text-[8px] hover:opacity-70 transition-opacity"
+                    title={p.isMutedByMe ? `Desmutar ${p.userName}` : `Mutar ${p.userName}`}
+                  >
+                    {p.isMutedByMe ? "🔇" : "🎙️"}
+                  </button>
+                )}
+                <span className={`font-pixel text-[8px] truncate ${
+                  p.isLocal ? "text-pixel-accent" : p.isMutedByMe ? "text-red-400/60" : "text-pixel-text"
+                }`}>
+                  {p.userName}{p.isLocal ? " (you)" : ""}
+                </span>
+              </div>
+            ))}
+          </div>
         )}
       </div>
 
