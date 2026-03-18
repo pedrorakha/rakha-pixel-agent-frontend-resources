@@ -23,7 +23,7 @@ export function MemberSelector() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedName, setSelectedName] = useState<string | null>(null);
 
-  const { setSelectedMember } = usePlayerStore();
+  const { setSelectedMember, enterSpectatorMode } = usePlayerStore();
 
   useEffect(() => {
     let cancelled = false;
@@ -106,23 +106,35 @@ export function MemberSelector() {
 
           {/* Step: Select */}
           {!loading && !error && step === "select" && (
-            <div className="flex flex-col gap-2 max-h-[50vh] overflow-y-auto">
-              {members.length === 0 && (
-                <p className="font-pixel text-[7px] text-pixel-muted text-center py-4">
-                  Nenhum membro encontrado
-                </p>
-              )}
-              {members.map((member) => (
+            <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-2 max-h-[40vh] overflow-y-auto">
+                {members.length === 0 && (
+                  <p className="font-pixel text-[7px] text-pixel-muted text-center py-4">
+                    Nenhum membro encontrado
+                  </p>
+                )}
+                {members.map((member) => (
+                  <button
+                    key={member.id}
+                    onClick={() => handleSelect(member)}
+                    className="w-full px-4 py-3 text-left bg-pixel-bg border-2 border-pixel-panel hover:border-pixel-accent hover:bg-pixel-panel/30 transition-all group"
+                  >
+                    <span className="font-pixel text-[8px] text-pixel-text group-hover:text-pixel-accent transition-colors">
+                      {member.name}
+                    </span>
+                  </button>
+                ))}
+              </div>
+              <div className="border-t-2 border-pixel-panel pt-3 mt-1">
                 <button
-                  key={member.id}
-                  onClick={() => handleSelect(member)}
-                  className="w-full px-4 py-3 text-left bg-pixel-bg border-2 border-pixel-panel hover:border-pixel-accent hover:bg-pixel-panel/30 transition-all group"
+                  onClick={enterSpectatorMode}
+                  className="w-full px-4 py-2.5 text-center bg-pixel-bg border-2 border-pixel-panel hover:border-pixel-muted hover:bg-pixel-panel/20 transition-all"
                 >
-                  <span className="font-pixel text-[8px] text-pixel-text group-hover:text-pixel-accent transition-colors">
-                    {member.name}
+                  <span className="font-pixel text-[7px] text-pixel-muted">
+                    ENTRAR COMO ESPECTADOR
                   </span>
                 </button>
-              ))}
+              </div>
             </div>
           )}
 

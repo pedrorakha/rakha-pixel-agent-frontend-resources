@@ -64,6 +64,7 @@ export default function OfficePage() {
     selectedMemberId,
     selectedMemberName,
     isSelectingMember,
+    isSpectator,
     loadFromStorage,
     clearSelectedMember,
   } = usePlayerStore();
@@ -116,7 +117,7 @@ export default function OfficePage() {
   return (
     <PasswordGate area="office">
       {/* Seletor de membro — aparece apos senha, antes do escritorio */}
-      {isSelectingMember ? (
+      {isSelectingMember && !isSpectator ? (
         <MemberSelector />
       ) : (
         <div className="w-screen overflow-hidden bg-pixel-bg relative" style={{ height: "100dvh" }}>
@@ -148,6 +149,15 @@ export default function OfficePage() {
                   title="Clique para trocar de personagem"
                 >
                   [{selectedMemberName}]
+                </button>
+              )}
+              {isSpectator && (
+                <button
+                  onClick={clearSelectedMember}
+                  className="font-pixel text-[9px] sm:text-[10px] text-pixel-muted hover:text-pixel-text transition-colors"
+                  title="Clique para selecionar um personagem"
+                >
+                  [ESPECTADOR]
                 </button>
               )}
               <span className="font-pixel text-[9px] sm:text-[10px] text-pixel-muted hidden sm:inline">

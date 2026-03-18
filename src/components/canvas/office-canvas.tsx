@@ -7,6 +7,8 @@ import { useOfficeStore } from "@/stores/office-store";
 import { useDiscordStore } from "@/stores/discord-store";
 import { usePlayerStore } from "@/stores/player-store";
 import { useChatStore } from "@/stores/chat-store";
+import { useReactionStore } from "@/stores/reaction-store";
+import { useFootprintStore } from "@/stores/footprint-store";
 import { usePlayerMovement } from "@/hooks/use-player-movement";
 import { useVoiceChat, detectRoom } from "@/hooks/use-voice-chat";
 import {
@@ -15,6 +17,7 @@ import {
   PlayerJumpPayload,
   PlayerLeavePayload,
   ChatMessagePayload,
+  PlayerReactionPayload,
 } from "@/hooks/use-multiplayer-sync";
 import { Renderer, updateCharacterAnimations } from "@/engine/renderer";
 import { Tilemap } from "@/engine/tilemap";
@@ -108,6 +111,13 @@ export function OfficeCanvas() {
   const chatHistory = useChatStore((s) => s.history);
   const addBubble = useChatStore((s) => s.addBubble);
   const updateBubbles = useChatStore((s) => s.updateBubbles);
+  const floatingReactions = useReactionStore((s) => s.reactions);
+  const addReaction = useReactionStore((s) => s.addReaction);
+  const updateReactions = useReactionStore((s) => s.updateReactions);
+  const footprints = useFootprintStore((s) => s.footprints);
+  const addFootprint = useFootprintStore((s) => s.addFootprint);
+  const updateFootprints = useFootprintStore((s) => s.updateFootprints);
+  const isSpectator = usePlayerStore((s) => s.isSpectator);
 
   const [characters, setCharacters] = useState<Character[]>([]);
   const [presenceMap, setPresenceMap] = useState<Map<string, DiscordStatus>>(new Map());
@@ -198,6 +208,13 @@ export function OfficeCanvas() {
     [addBubble]
   );
 
+  const handleReaction = useCallback(
+    (payload: PlayerReactionPayload) => {
+      addReaction(payload.memberId, payload.emoji, payload.timestamp);
+    },
+    [addReaction]
+  );
+
   // Jogador saiu — retorna personagem a posicao baseada no Discord status
   const presenceMapRef = useRef(presenceMap);
   presenceMapRef.current = presenceMap;
@@ -270,13 +287,14 @@ export function OfficeCanvas() {
     return { gridX: char.gridX, gridY: char.gridY, direction: char.direction, state: char.state };
   }, []);
 
-  const { emitMove, emitJump, emitChat, onlinePlayers } = useMultiplayerSync({
+  const { emitMove, emitJump, emitChat, emitReaction, onlinePlayers } = useMultiplayerSync({
     playerId: selectedMemberId,
     getPlayerPosition,
     onRemoteMove: handleRemoteMove,
     onRemoteJump: handleRemoteJump,
     onChatMessage: handleChatMessage,
     onPlayerLeave: handlePlayerLeave,
+    onReaction: handleReaction,
   });
 
   // Voice chat — so conecta quando 2+ jogadores no mesmo quarto
@@ -305,11 +323,27 @@ export function OfficeCanvas() {
     playersInSameRoom,
   });
 
+  // Set de jogadores em voice call (todos no mesmo quarto quando a call esta ativa)
+  const voiceInCall = isInCall && myRoom >= 0
+    ? new Set(
+        characters
+          .filter((c) => {
+            if (c.id === selectedMemberId) return true;
+            if (!onlinePlayers.has(c.id)) return false;
+            return detectRoom(c.gridX, c.gridY) === myRoom;
+          })
+          .map((c) => c.id)
+      )
+    : new Set<string>();
+  const voiceInCallRef = useRef(voiceInCall);
+  voiceInCallRef.current = voiceInCall;
+
   // Callback quando o jogador local se move
   const handlePlayerMove = useCallback(
     (gridX: number, gridY: number, direction: Character["direction"]) => {
       // Mover fecha menu — walking_coffee persiste, outros viram walking
       setCharMenu(null);
+      addFootprint(gridX, gridY);
       setCharacters((prev) =>
         prev.map((char) => {
           if (char.id !== selectedMemberIdRef.current) return char;
@@ -694,6 +728,8 @@ export function OfficeCanvas() {
 
       // Atualiza chat bubbles (fade)
       updateBubbles(deltaTime);
+      updateReactions(deltaTime);
+      updateFootprints();
 
       // Movimentacao do jogador (ignora se chat focado)
       if (!chatFocusedRef.current) {
@@ -733,6 +769,12 @@ export function OfficeCanvas() {
   const onlinePlayersRef = useRef(onlinePlayers);
   onlinePlayersRef.current = onlinePlayers;
 
+  const reactionsRef = useRef(floatingReactions);
+  reactionsRef.current = floatingReactions;
+
+  const footprintsRef = useRef(footprints);
+  footprintsRef.current = footprints;
+
   const render = useCallback(
     (_deltaTime: number, time: number) => {
       if (!ctx || !rendererRef.current) return;
@@ -757,7 +799,10 @@ export function OfficeCanvas() {
         mergedPresenceMap,
         selectedMemberIdRef.current,
         chatBubblesRef.current,
-        onlinePlayersRef.current
+        onlinePlayersRef.current,
+        reactionsRef.current,
+        footprintsRef.current,
+        voiceInCallRef.current
       );
     },
     [ctx, cameraX, cameraY, zoom, size, storeDesks, presences, presenceMap]
@@ -1038,8 +1083,8 @@ export function OfficeCanvas() {
         )}
       </div>
 
-      {/* Chat input — centro horizontal */}
-      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 w-full max-w-md px-6">
+      {/* Chat input — centro horizontal (oculto no modo espectador) */}
+      {!isSpectator && selectedMemberId && <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 w-full max-w-md px-6">
         <form onSubmit={handleChatSubmit} className="flex gap-2">
           <input
             ref={chatInputRef}
@@ -1060,7 +1105,7 @@ export function OfficeCanvas() {
             SEND
           </button>
         </form>
-      </div>
+      </div>}
 
       {/* Painel esquerdo — historico + keybindings + (jukebox abaixo em z-50) */}
       <div className="absolute bottom-20 left-6 z-20 flex flex-col gap-2 w-[260px]">
@@ -1095,6 +1140,21 @@ export function OfficeCanvas() {
         >
           {historyOpen ? "[X] FECHAR CHAT" : `[CHAT] ${chatHistory.length > 0 ? `(${chatHistory.length})` : ""}`}
         </button>
+
+        {/* Quick reactions */}
+        {!isSpectator && selectedMemberId && (
+          <div className="flex gap-1 bg-pixel-surface/80 border-2 border-pixel-panel px-3 py-2">
+            {["❤️", "👍", "😂", "👏", "🔥", "👀"].map((emoji) => (
+              <button
+                key={emoji}
+                onClick={() => emitReaction(emoji)}
+                className="w-8 h-8 flex items-center justify-center hover:bg-pixel-accent/20 transition-colors text-sm"
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Keybindings */}
         <div className="bg-pixel-surface/80 border-2 border-pixel-panel px-4 py-2.5">

@@ -8,10 +8,12 @@ interface PlayerState {
   selectedMemberId: string | null;
   selectedMemberName: string | null;
   isSelectingMember: boolean;
+  isSpectator: boolean;
 
   setSelectedMember: (id: string, name: string) => void;
   clearSelectedMember: () => void;
   setIsSelectingMember: (value: boolean) => void;
+  enterSpectatorMode: () => void;
   loadFromStorage: () => void;
 }
 
@@ -19,6 +21,7 @@ export const usePlayerStore = create<PlayerState>((set) => ({
   selectedMemberId: null,
   selectedMemberName: null,
   isSelectingMember: false,
+  isSpectator: false,
 
   setSelectedMember: (id, name) => {
     localStorage.setItem(
@@ -38,10 +41,21 @@ export const usePlayerStore = create<PlayerState>((set) => ({
       selectedMemberId: null,
       selectedMemberName: null,
       isSelectingMember: true,
+      isSpectator: false,
     });
   },
 
   setIsSelectingMember: (value) => set({ isSelectingMember: value }),
+
+  enterSpectatorMode: () => {
+    localStorage.removeItem(STORAGE_KEY);
+    set({
+      selectedMemberId: null,
+      selectedMemberName: null,
+      isSelectingMember: false,
+      isSpectator: true,
+    });
+  },
 
   loadFromStorage: () => {
     const stored = localStorage.getItem(STORAGE_KEY);

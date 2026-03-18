@@ -27,6 +27,12 @@ export interface PlayerLeavePayload {
   memberId: string;
 }
 
+export interface PlayerReactionPayload {
+  memberId: string;
+  emoji: string;
+  timestamp: number;
+}
+
 export interface ChatMessagePayload {
   id: string;
   memberId: string;
@@ -51,6 +57,7 @@ interface UseMultiplayerSyncOptions {
   onRemoteJump: (payload: PlayerJumpPayload) => void;
   onChatMessage: (payload: ChatMessagePayload) => void;
   onPlayerLeave: (payload: PlayerLeavePayload) => void;
+  onReaction: (payload: PlayerReactionPayload) => void;
 }
 
 export function useMultiplayerSync({
@@ -60,6 +67,7 @@ export function useMultiplayerSync({
   onRemoteJump,
   onChatMessage,
   onPlayerLeave,
+  onReaction,
 }: UseMultiplayerSyncOptions) {
   const socketRef = useRef<Socket | null>(null);
   const lastMoveRef = useRef<number>(0);
@@ -74,11 +82,13 @@ export function useMultiplayerSync({
   const onRemoteJumpRef = useRef(onRemoteJump);
   const onChatMessageRef = useRef(onChatMessage);
   const onPlayerLeaveRef = useRef(onPlayerLeave);
+  const onReactionRef = useRef(onReaction);
 
   onRemoteMoveRef.current = onRemoteMove;
   onRemoteJumpRef.current = onRemoteJump;
   onChatMessageRef.current = onChatMessage;
   onPlayerLeaveRef.current = onPlayerLeave;
+  onReactionRef.current = onReaction;
 
   // So conecta quando tiver playerId
   useEffect(() => {
@@ -138,6 +148,10 @@ export function useMultiplayerSync({
 
     socket.on("chat:message", (data: ChatMessagePayload) => {
       onChatMessageRef.current(data);
+    });
+
+    socket.on("player:reaction", (data: PlayerReactionPayload) => {
+      onReactionRef.current(data);
     });
 
     socket.on("player:leave", (data: PlayerLeavePayload) => {
@@ -209,5 +223,18 @@ export function useMultiplayerSync({
     []
   );
 
-  return { emitMove, emitJump, emitChat, onlinePlayers };
+  const emitReaction = useCallback(
+    (emoji: string) => {
+      const pid = playerIdRef.current;
+      if (!socketRef.current?.connected || !pid) return;
+
+      socketRef.current.emit("player:reaction", {
+        memberId: pid,
+        emoji,
+      });
+    },
+    []
+  );
+
+  return { emitMove, emitJump, emitChat, emitReaction, onlinePlayers };
 }
