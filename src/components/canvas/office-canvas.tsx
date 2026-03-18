@@ -1067,7 +1067,8 @@ export function OfficeCanvas() {
             )}
           </div>
         )}
-        {isInCall && (
+        {/* Mic toggle — visivel sempre que esta num quarto (mesmo sem call ativa) */}
+        {!isSpectator && selectedMemberId && myRoom >= 0 && (
           <button
             onClick={toggleMute}
             className={`flex items-center gap-2 px-4 py-1.5 border-2 transition-colors ${

@@ -64,6 +64,7 @@ export function useVoiceChat({ playerName, gridX, gridY, enabled, playersInSameR
   const audioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
   const [currentRoom, setCurrentRoom] = useState(-1);
   const [isMuted, setIsMuted] = useState(false);
+  const isMutedRef = useRef(false);
   const [isInCall, setIsInCall] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
   const [participantCount, setParticipantCount] = useState(0);
@@ -163,10 +164,14 @@ export function useVoiceChat({ playerName, gridX, gridY, enabled, playersInSameR
           setCurrentRoom(roomIndex);
           updateParticipantCount();
 
+          // Aplica estado de mute que ja estava definido antes da call
+          if (isMutedRef.current) {
+            call.setLocalAudio(false);
+          }
+
           const participants = call.participants();
           const remotes = Object.values(participants).filter((p) => !p.local);
           remotes.forEach((p) => playRemoteAudio(p));
-          // Som ao entrar na call (se ja tem outros participantes)
           if (remotes.length > 0) playJoinSound();
         });
 
@@ -216,10 +221,13 @@ export function useVoiceChat({ playerName, gridX, gridY, enabled, playersInSameR
   );
 
   const toggleMute = useCallback(() => {
-    if (!callRef.current) return;
     const newMuted = !isMuted;
-    callRef.current.setLocalAudio(!newMuted);
+    isMutedRef.current = newMuted;
     setIsMuted(newMuted);
+    // Aplica no call se ja estiver conectado
+    if (callRef.current) {
+      callRef.current.setLocalAudio(!newMuted);
+    }
   }, [isMuted]);
 
   // Auto join/leave baseado em room E quantidade de jogadores
