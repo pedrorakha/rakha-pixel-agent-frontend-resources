@@ -7,7 +7,10 @@ export type CharacterState =
   | "sleeping"
   | "walking"
   | "idle"
-  | "dancing";
+  | "dancing"
+  | "walking_coffee"
+  | "waving"
+  | "sitting_floor";
 
 export type AccessoryHat = "none" | "cap" | "beanie" | "tophat" | "crown" | "headband";
 export type AccessoryGlasses = "none" | "round" | "square" | "sunglasses" | "monocle";
@@ -57,4 +60,7 @@ export const CHARACTER_ANIMATIONS: Record<CharacterState, AnimationDef> = {
   walking: { frames: 4, speed: 100, loop: true },
   idle: { frames: 2, speed: 600, loop: true },
   dancing: { frames: 4, speed: 180, loop: true },
+  walking_coffee: { frames: 4, speed: 120, loop: true },
+  waving: { frames: 4, speed: 200, loop: true },
+  sitting_floor: { frames: 2, speed: 700, loop: true },
 };

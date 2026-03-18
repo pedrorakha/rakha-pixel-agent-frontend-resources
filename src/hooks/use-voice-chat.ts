@@ -15,7 +15,7 @@ interface VoiceJoinResponse {
  * Detecta em qual room (0-8) o jogador esta baseado na posicao grid.
  * Retorna -1 se nao esta em nenhuma room.
  */
-function detectRoom(gridX: number, gridY: number): number {
+export function detectRoom(gridX: number, gridY: number): number {
   for (let i = 0; i < ROOMS.length; i++) {
     const r = ROOMS[i];
     if (gridX >= r.x && gridX < r.x + r.w && gridY >= r.y && gridY < r.y + r.h) {
@@ -30,9 +30,10 @@ interface UseVoiceChatOptions {
   gridX: number;
   gridY: number;
   enabled: boolean;
+  playersInSameRoom: number; // quantos jogadores online estao no mesmo quarto (incluindo eu)
 }
 
-export function useVoiceChat({ playerName, gridX, gridY, enabled }: UseVoiceChatOptions) {
+export function useVoiceChat({ playerName, gridX, gridY, enabled, playersInSameRoom }: UseVoiceChatOptions) {
   const callRef = useRef<DailyCall | null>(null);
   const audioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
   const [currentRoom, setCurrentRoom] = useState(-1);
@@ -46,6 +47,9 @@ export function useVoiceChat({ playerName, gridX, gridY, enabled }: UseVoiceChat
 
   const detectedRoom = enabled ? detectRoom(gridX, gridY) : -1;
 
+  // So deve estar em call se tem 2+ jogadores no mesmo quarto
+  const shouldBeInCall = detectedRoom >= 0 && playersInSameRoom >= 2;
+
   const updateParticipantCount = useCallback(() => {
     if (!callRef.current) {
       setParticipantCount(0);
@@ -55,14 +59,12 @@ export function useVoiceChat({ playerName, gridX, gridY, enabled }: UseVoiceChat
     setParticipantCount(Object.keys(participants).length);
   }, []);
 
-  // Reproduz audio de um participante remoto via <audio> element
   const playRemoteAudio = useCallback((participant: DailyParticipant) => {
     if (participant.local) return;
     const sessionId = participant.session_id;
 
     const audioTrack = participant.tracks?.audio;
     if (audioTrack?.state === "playable" && audioTrack.persistentTrack) {
-      // Ja tem element? Atualiza a track
       let el = audioElementsRef.current.get(sessionId);
       if (!el) {
         el = document.createElement("audio");
@@ -72,13 +74,10 @@ export function useVoiceChat({ playerName, gridX, gridY, enabled }: UseVoiceChat
       }
       const stream = new MediaStream([audioTrack.persistentTrack]);
       el.srcObject = stream;
-      el.play().catch(() => {
-        // Autoplay bloqueado — tenta novamente em interacao do usuario
-      });
+      el.play().catch(() => {});
     }
   }, []);
 
-  // Remove audio element de um participante
   const removeRemoteAudio = useCallback((sessionId: string) => {
     const el = audioElementsRef.current.get(sessionId);
     if (el) {
@@ -88,7 +87,6 @@ export function useVoiceChat({ playerName, gridX, gridY, enabled }: UseVoiceChat
     }
   }, []);
 
-  // Limpa todos os audio elements
   const cleanupAudioElements = useCallback(() => {
     audioElementsRef.current.forEach((el) => {
       el.srcObject = null;
@@ -139,7 +137,6 @@ export function useVoiceChat({ playerName, gridX, gridY, enabled }: UseVoiceChat
           setCurrentRoom(roomIndex);
           updateParticipantCount();
 
-          // Reproduz audio de participantes que ja estao na call
           const participants = call.participants();
           Object.values(participants).forEach((p) => {
             if (!p.local) playRemoteAudio(p);
@@ -197,16 +194,17 @@ export function useVoiceChat({ playerName, gridX, gridY, enabled }: UseVoiceChat
     setIsMuted(newMuted);
   }, [isMuted]);
 
-  // Auto join/leave quando muda de room
+  // Auto join/leave baseado em room E quantidade de jogadores
   useEffect(() => {
-    if (detectedRoom === currentRoomRef.current) return;
-
-    if (detectedRoom === -1) {
+    if (shouldBeInCall && !isInCall && !isJoining) {
+      joinCall(detectedRoom);
+    } else if (!shouldBeInCall && isInCall) {
       leaveCall();
-    } else {
+    } else if (isInCall && detectedRoom !== currentRoomRef.current && detectedRoom >= 0) {
+      // Mudou de room — reconecta
       joinCall(detectedRoom);
     }
-  }, [detectedRoom, joinCall, leaveCall]);
+  }, [shouldBeInCall, detectedRoom, isInCall, isJoining, joinCall, leaveCall]);
 
   // Cleanup ao desmontar
   useEffect(() => {
@@ -225,6 +223,7 @@ export function useVoiceChat({ playerName, gridX, gridY, enabled }: UseVoiceChat
     isJoining,
     isMuted,
     currentRoom,
+    detectedRoom,
     participantCount,
     toggleMute,
     leaveCall,

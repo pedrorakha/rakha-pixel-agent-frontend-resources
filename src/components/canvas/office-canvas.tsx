@@ -8,7 +8,7 @@ import { useDiscordStore } from "@/stores/discord-store";
 import { usePlayerStore } from "@/stores/player-store";
 import { useChatStore } from "@/stores/chat-store";
 import { usePlayerMovement } from "@/hooks/use-player-movement";
-import { useVoiceChat } from "@/hooks/use-voice-chat";
+import { useVoiceChat, detectRoom } from "@/hooks/use-voice-chat";
 import {
   useMultiplayerSync,
   PlayerMovePayload,
@@ -116,22 +116,6 @@ export function OfficeCanvas() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [charMenu, setCharMenu] = useState<{ screenX: number; screenY: number } | null>(null);
 
-  // Voice chat — detecta room pela posicao do jogador
-  const currentPlayerChar = characters.find((c) => c.id === selectedMemberId);
-  const {
-    isInCall,
-    isJoining: voiceJoining,
-    isMuted,
-    participantCount,
-    roomLabel: voiceRoomLabel,
-    toggleMute,
-  } = useVoiceChat({
-    playerName: selectedMemberName,
-    gridX: currentPlayerChar?.gridX ?? -1,
-    gridY: currentPlayerChar?.gridY ?? -1,
-    enabled: !!selectedMemberId,
-  });
-
   const chatInputRef = useRef<HTMLInputElement>(null);
   const historyEndRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<Renderer | null>(null);
@@ -166,10 +150,18 @@ export function OfficeCanvas() {
 
   // --- Multiplayer callbacks ---
 
+  // Buffer de posicoes pendentes (recebidas antes dos characters carregarem)
+  const pendingSyncRef = useRef<PlayerMovePayload[]>([]);
+
   const handleRemoteMove = useCallback(
     (payload: PlayerMovePayload) => {
-      setCharacters((prev) =>
-        prev.map((char) => {
+      setCharacters((prev) => {
+        // Se characters ainda nao carregou, guarda no buffer
+        if (prev.length === 0) {
+          pendingSyncRef.current.push(payload);
+          return prev;
+        }
+        return prev.map((char) => {
           if (char.id !== payload.memberId) return char;
           return {
             ...char,
@@ -180,8 +172,8 @@ export function OfficeCanvas() {
             animationFrame: 0,
             animationTimer: 0,
           };
-        })
-      );
+        });
+      });
     },
     []
   );
@@ -287,39 +279,77 @@ export function OfficeCanvas() {
     onPlayerLeave: handlePlayerLeave,
   });
 
+  // Voice chat — so conecta quando 2+ jogadores no mesmo quarto
+  const currentPlayerChar = characters.find((c) => c.id === selectedMemberId);
+  const myRoom = currentPlayerChar ? detectRoom(currentPlayerChar.gridX, currentPlayerChar.gridY) : -1;
+  const playersInSameRoom = myRoom >= 0
+    ? characters.filter((c) => {
+        if (c.id === selectedMemberId) return true; // eu
+        if (!onlinePlayers.has(c.id)) return false; // nao esta online
+        return detectRoom(c.gridX, c.gridY) === myRoom;
+      }).length
+    : 0;
+
+  const {
+    isInCall,
+    isJoining: voiceJoining,
+    isMuted,
+    participantCount,
+    roomLabel: voiceRoomLabel,
+    toggleMute,
+  } = useVoiceChat({
+    playerName: selectedMemberName,
+    gridX: currentPlayerChar?.gridX ?? -1,
+    gridY: currentPlayerChar?.gridY ?? -1,
+    enabled: !!selectedMemberId,
+    playersInSameRoom,
+  });
+
   // Callback quando o jogador local se move
   const handlePlayerMove = useCallback(
     (gridX: number, gridY: number, direction: Character["direction"]) => {
-      // Mover cancela danca e fecha menu
+      // Mover fecha menu — walking_coffee persiste, outros viram walking
       setCharMenu(null);
       setCharacters((prev) =>
         prev.map((char) => {
           if (char.id !== selectedMemberIdRef.current) return char;
+          const moveState = char.state === "walking_coffee" ? "walking_coffee" as const : "walking" as const;
           return {
             ...char,
             gridX,
             gridY,
             direction,
-            state: "walking" as const,
+            state: moveState,
             animationFrame: 0,
             animationTimer: 0,
           };
         })
       );
-      emitMove(gridX, gridY, direction, "walking");
+      const currentChar = charactersRef.current.find((c) => c.id === selectedMemberIdRef.current);
+      const moveState = currentChar?.state === "walking_coffee" ? "walking_coffee" : "walking";
+      emitMove(gridX, gridY, direction, moveState);
     },
     [emitMove]
   );
 
   // Toggle danca
-  const handleToggleDance = useCallback(() => {
+  // Emotes: lista de estados que o jogador pode ativar
+  type EmoteState = "dancing" | "walking_coffee" | "waving" | "sitting_floor";
+  const EMOTE_LABELS: Record<EmoteState, string> = {
+    dancing: "DANCE",
+    walking_coffee: "COFFEE",
+    waving: "WAVE",
+    sitting_floor: "SIT",
+  };
+
+  const handleEmote = useCallback((emote: EmoteState) => {
     const playerChar = charactersRef.current.find(
       (c) => c.id === selectedMemberIdRef.current
     );
     if (!playerChar) return;
 
-    const isDancing = playerChar.state === "dancing";
-    const newState = isDancing ? "idle" as const : "dancing" as const;
+    // Se ja esta no emote, desativa (volta pra idle)
+    const newState = playerChar.state === emote ? "idle" as const : emote;
 
     setCharacters((prev) =>
       prev.map((char) => {
@@ -510,6 +540,28 @@ export function OfficeCanvas() {
               jumpTimer: 0,
             } satisfies Character;
           });
+
+        // Aplica posicoes pendentes do sync (recebidas antes do fetch)
+        const pending = pendingSyncRef.current;
+        if (pending.length > 0) {
+          const pendingMap = new Map<string, PlayerMovePayload>();
+          for (const p of pending) pendingMap.set(p.memberId, p);
+          for (let i = 0; i < chars.length; i++) {
+            const update = pendingMap.get(chars[i].id);
+            if (update) {
+              chars[i] = {
+                ...chars[i],
+                gridX: update.gridX,
+                gridY: update.gridY,
+                direction: update.direction,
+                state: update.state,
+                animationFrame: 0,
+                animationTimer: 0,
+              };
+            }
+          }
+          pendingSyncRef.current = [];
+        }
 
         setCharacters(chars);
         setPresenceMap(newPresenceMap);
@@ -894,33 +946,39 @@ export function OfficeCanvas() {
         onTouchCancel={handleTouchEnd}
       />
 
-      {/* Menu do personagem */}
-      {charMenu && (
-        <>
-          {/* Backdrop invisivel para fechar ao clicar fora */}
-          <div
-            className="fixed inset-0 z-30"
-            onClick={() => setCharMenu(null)}
-          />
-          <div
-            className="fixed z-40 bg-pixel-surface border-2 border-pixel-panel shadow-[3px_3px_0px_0px_rgba(0,0,0,0.5)]"
-            style={{
-              left: charMenu.screenX,
-              top: charMenu.screenY - 8,
-              transform: "translate(-50%, -100%)",
-            }}
-          >
-            <button
-              onClick={handleToggleDance}
-              className="w-full px-5 py-2.5 font-pixel text-[10px] text-pixel-text hover:bg-pixel-accent/20 hover:text-pixel-accent transition-colors whitespace-nowrap text-left"
+      {/* Menu do personagem — emotes */}
+      {charMenu && (() => {
+        const currentState = charactersRef.current.find((c) => c.id === selectedMemberId)?.state;
+        const emotes: EmoteState[] = ["dancing", "walking_coffee", "waving", "sitting_floor"];
+        return (
+          <>
+            <div
+              className="fixed inset-0 z-30"
+              onClick={() => setCharMenu(null)}
+            />
+            <div
+              className="fixed z-40 bg-pixel-surface border-2 border-pixel-panel shadow-[2px_2px_0px_0px_rgba(0,0,0,0.4)]"
+              style={{
+                left: charMenu.screenX,
+                top: charMenu.screenY - 4,
+                transform: "translate(-50%, -100%)",
+              }}
             >
-              {charactersRef.current.find((c) => c.id === selectedMemberId)?.state === "dancing"
-                ? "STOP DANCE"
-                : "DANCE"}
-            </button>
-          </div>
-        </>
-      )}
+              {emotes.map((emote) => (
+                <button
+                  key={emote}
+                  onClick={() => handleEmote(emote)}
+                  className={`block px-3 py-2 font-pixel text-[10px] hover:bg-pixel-accent/20 hover:text-pixel-accent transition-colors whitespace-nowrap text-left ${
+                    currentState === emote ? "text-pixel-accent bg-pixel-accent/10" : "text-pixel-text"
+                  }`}
+                >
+                  {currentState === emote ? `X ${EMOTE_LABELS[emote]}` : EMOTE_LABELS[emote]}
+                </button>
+              ))}
+            </div>
+          </>
+        );
+      })()}
 
       {/* Zoom controls */}
       <div className="absolute bottom-6 right-6 flex flex-col gap-2 z-20">

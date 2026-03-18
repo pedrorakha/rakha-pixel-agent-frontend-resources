@@ -2,7 +2,7 @@ import { CharacterState } from "@/types/character";
 import { DiscordStatus } from "@/types/discord";
 
 export const TILE_SIZE = 16;
-export const GRID_WIDTH = 37;
+export const GRID_WIDTH = 59;
 export const GRID_HEIGHT = 36;
 export const DEFAULT_ZOOM = 2;
 export const MIN_ZOOM = 1;
@@ -103,31 +103,17 @@ export const ANIMATION_SPEEDS: Record<CharacterState, number> = {
   walking: 100,
   idle: 600,
   dancing: 180,
+  walking_coffee: 120,
+  waving: 200,
+  sitting_floor: 700,
 };
 
 // ============================================================
-// OFFICE LAYOUT — 37 x 36 grid — 9 ROOMS (3x3)
+// OFFICE LAYOUT — 52 x 36 grid — 9 ROOMS (3x3) + Meeting Room
 //
-// Each room: 9 wide x 8 tall (interior)
-// With walls each room occupies 11 wide x 10 tall
-//
-// Columns:
-//   0: outer wall
-//   1: room wall | 2-10: room interior | 11: room wall
-//   12: hallway
-//   13: room wall | 14-22: room interior | 23: room wall
-//   24: hallway
-//   25: room wall | 26-34: room interior | 35: room wall
-//   36: outer wall
-//
-// Rows:
-//   0: outer wall
-//   1: room wall | 2-9: room interior | 10: room wall
-//   11-12: hallway
-//   13: room wall | 14-21: room interior | 22: room wall
-//   23-24: hallway
-//   25: room wall | 26-33: room interior | 34: room wall
-//   35: outer wall
+// Columns 0-36: 9 personal rooms (3x3 grid)
+// Columns 37-38: hallway connecting to meeting room
+// Columns 39-51: meeting room (wall + 11 interior + wall)
 //
 // Tile IDs: 0=empty, 1=wall, 4=hall A, 5=hall B, 6=room A, 7=room B
 // ============================================================
@@ -140,7 +126,7 @@ interface RoomDef {
   label: string;
 }
 
-// 9 rooms: 3 columns x 3 rows
+// 9 personal rooms (3x3) + 1 meeting room
 export const ROOMS: RoomDef[] = [
   // Row 1 (top)
   { x: 2,  y: 2,  w: 9, h: 8, label: "Room 1" },
@@ -154,7 +140,11 @@ export const ROOMS: RoomDef[] = [
   { x: 2,  y: 26, w: 9, h: 8, label: "Room 7" },
   { x: 14, y: 26, w: 9, h: 8, label: "Room 8" },
   { x: 26, y: 26, w: 9, h: 8, label: "Room 9" },
+  // Meeting room (right side, full height, wider)
+  { x: 39, y: 3, w: 19, h: 30, label: "Meeting Room" },
 ];
+
+export const MEETING_ROOM_INDEX = 9;
 
 const W = GRID_WIDTH;
 const H = GRID_HEIGHT;
@@ -213,6 +203,14 @@ export const OFFICE_LAYOUT: number[][] = (() => {
     set(doorX - 1, ry - 1, (doorX - 1 + ry - 1) % 2 === 0 ? 4 : 5);
     set(doorX, ry - 1, (doorX + ry - 1) % 2 === 0 ? 4 : 5);
     set(doorX + 1, ry - 1, (doorX + 1 + ry - 1) % 2 === 0 ? 4 : 5);
+
+    // Meeting room: porta na parede esquerda (3 tiles, centro vertical)
+    if (room.label === "Meeting Room") {
+      const doorY = ry + Math.floor(rh / 2);
+      set(rx - 1, doorY - 1, (rx - 1 + doorY - 1) % 2 === 0 ? 4 : 5);
+      set(rx - 1, doorY, (rx - 1 + doorY) % 2 === 0 ? 4 : 5);
+      set(rx - 1, doorY + 1, (rx - 1 + doorY + 1) % 2 === 0 ? 4 : 5);
+    }
   }
 
   return layout;
@@ -220,7 +218,7 @@ export const OFFICE_LAYOUT: number[][] = (() => {
 
 // Desk position per room — left side of room, facing south
 // Desk is 3x2, placed at (room.x + 1, room.y + 1) so character sits at room.y + 3
-export const DEFAULT_DESKS = ROOMS.map((room, i) => ({
+export const DEFAULT_DESKS = ROOMS.slice(0, 9).map((room, i) => ({
   id: `desk-${i + 1}`,
   gridX: room.x + 3,
   gridY: room.y + 2,
@@ -241,7 +239,8 @@ export interface RoomFurniture {
   lamp: { x: number; y: number };
 }
 
-export const ROOM_FURNITURE: RoomFurniture[] = ROOMS.map((room, i) => ({
+// Moveis apenas para as 9 rooms pessoais (nao inclui meeting room)
+export const ROOM_FURNITURE: RoomFurniture[] = ROOMS.slice(0, 9).map((room, i) => ({
   roomIndex: i,
   // Desk: offset +3 right, +2 down from room origin (matches DB: room.x+3, room.y+2)
   desk: { x: room.x + 3, y: room.y + 2 },

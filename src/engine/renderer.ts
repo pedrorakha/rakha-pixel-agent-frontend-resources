@@ -11,6 +11,7 @@ import {
   ANIMATION_SPEEDS,
   ROOM_FURNITURE,
   ROOMS,
+  MEETING_ROOM_INDEX,
 } from "@/lib/constants";
 import { Character, CharacterState, AccessoryHat, AccessoryGlasses } from "@/types/character";
 import { Desk } from "@/types/office";
@@ -60,6 +61,9 @@ export class Renderer {
     for (const rf of ROOM_FURNITURE) {
       this.renderRoomFurniture(ctx, state, rf);
     }
+
+    // Layer 2.5: Meeting room furniture
+    this.renderMeetingRoom(ctx, state);
 
     // Layer 3: Desks (bigger 3x2)
     for (const desk of desks) {
@@ -350,6 +354,114 @@ export class Renderer {
     }
   }
 
+  private renderMeetingRoom(
+    ctx: CanvasRenderingContext2D,
+    state: GameState
+  ): void {
+    const room = ROOMS[MEETING_ROOM_INDEX];
+    if (!room) return;
+
+    const zoom = state.camera.zoom;
+    const ts = TILE_SIZE * zoom;
+
+    // Mesa de reuniao grande no centro (9 wide x 14 tall)
+    const tableW = 9;
+    const tableH = 14;
+    const tableX = room.x + Math.floor((room.w - tableW) / 2);
+    const tableY = room.y + Math.floor((room.h - tableH) / 2);
+    const { x: sx, y: sy } = this.worldToScreen(state, tableX * TILE_SIZE, tableY * TILE_SIZE);
+    const tw = tableW * ts;
+    const th = tableH * ts;
+
+    // Mesa
+    ctx.fillStyle = COLORS.desk;
+    ctx.fillRect(sx, sy, tw, th);
+    // Borda clara no topo
+    ctx.fillStyle = COLORS.deskLight;
+    ctx.fillRect(sx + zoom, sy + zoom, tw - 2 * zoom, 3 * zoom);
+    // Borda escura embaixo
+    ctx.fillStyle = COLORS.deskDark;
+    ctx.fillRect(sx, sy + th - 3 * zoom, tw, 3 * zoom);
+    // Interior da mesa (mais claro)
+    ctx.fillStyle = "#9a7420";
+    ctx.fillRect(sx + 3 * zoom, sy + 4 * zoom, tw - 6 * zoom, th - 7 * zoom);
+
+    // Cadeiras ao redor
+    const chairColor = COLORS.chair;
+    const chairW = 2 * ts;
+    const chairH = 1.5 * ts;
+
+    // Cadeiras no topo (4)
+    for (let i = 0; i < 4; i++) {
+      const cx = sx + (0.5 + i * 2.1) * ts;
+      const cy = sy - chairH - 1 * zoom;
+      ctx.fillStyle = chairColor;
+      ctx.fillRect(cx, cy, chairW, chairH);
+      ctx.fillStyle = COLORS.chairSeat;
+      ctx.fillRect(cx + zoom, cy + zoom, chairW - 2 * zoom, chairH - 2 * zoom);
+    }
+
+    // Cadeiras embaixo (4)
+    for (let i = 0; i < 4; i++) {
+      const cx = sx + (0.5 + i * 2.1) * ts;
+      const cy = sy + th + 1 * zoom;
+      ctx.fillStyle = chairColor;
+      ctx.fillRect(cx, cy, chairW, chairH);
+      ctx.fillStyle = COLORS.chairSeat;
+      ctx.fillRect(cx + zoom, cy + zoom, chairW - 2 * zoom, chairH - 2 * zoom);
+    }
+
+    // Cadeiras na esquerda (5)
+    for (let i = 0; i < 5; i++) {
+      const cx = sx - chairH - 1 * zoom;
+      const cy = sy + (0.5 + i * 2.6) * ts;
+      ctx.fillStyle = chairColor;
+      ctx.fillRect(cx, cy, chairH, chairW);
+      ctx.fillStyle = COLORS.chairSeat;
+      ctx.fillRect(cx + zoom, cy + zoom, chairH - 2 * zoom, chairW - 2 * zoom);
+    }
+
+    // Cadeiras na direita (5)
+    for (let i = 0; i < 5; i++) {
+      const cx = sx + tw + 1 * zoom;
+      const cy = sy + (0.5 + i * 2.6) * ts;
+      ctx.fillStyle = chairColor;
+      ctx.fillRect(cx, cy, chairH, chairW);
+      ctx.fillStyle = COLORS.chairSeat;
+      ctx.fillRect(cx + zoom, cy + zoom, chairH - 2 * zoom, chairW - 2 * zoom);
+    }
+
+    // Planta decorativa no canto superior direito
+    const plantX = room.x + room.w - 2;
+    const plantY = room.y + 1;
+    const { x: px, y: py } = this.worldToScreen(state, plantX * TILE_SIZE, plantY * TILE_SIZE);
+    ctx.fillStyle = COLORS.plantPot;
+    ctx.fillRect(px + 3 * zoom, py + 8 * zoom, 10 * zoom, 6 * zoom);
+    ctx.fillStyle = COLORS.plant;
+    ctx.fillRect(px + 4 * zoom, py + 2 * zoom, 4 * zoom, 6 * zoom);
+    ctx.fillRect(px + 8 * zoom, py + 3 * zoom, 4 * zoom, 5 * zoom);
+
+    // Planta no canto inferior esquerdo
+    const plant2X = room.x + 1;
+    const plant2Y = room.y + room.h - 2;
+    const { x: p2x, y: p2y } = this.worldToScreen(state, plant2X * TILE_SIZE, plant2Y * TILE_SIZE);
+    ctx.fillStyle = COLORS.plantPot;
+    ctx.fillRect(p2x + 3 * zoom, p2y + 8 * zoom, 10 * zoom, 6 * zoom);
+    ctx.fillStyle = COLORS.plant;
+    ctx.fillRect(p2x + 4 * zoom, p2y + 2 * zoom, 4 * zoom, 6 * zoom);
+    ctx.fillRect(p2x + 8 * zoom, p2y + 3 * zoom, 4 * zoom, 5 * zoom);
+
+    // Label "MEETING ROOM"
+    const labelX = room.x + room.w / 2;
+    const labelY = room.y + room.h - 1;
+    const { x: lx, y: ly } = this.worldToScreen(state, labelX * TILE_SIZE, labelY * TILE_SIZE);
+    ctx.fillStyle = "rgba(255,255,255,0.15)";
+    ctx.font = `${Math.max(5, 5 * zoom)}px "Press Start 2P", monospace`;
+    ctx.textAlign = "center";
+    ctx.fillText("MEETING ROOM", lx, ly);
+    ctx.textAlign = "start";
+  }
+
   private renderChatBubble(
     ctx: CanvasRenderingContext2D,
     state: GameState,
@@ -490,35 +602,58 @@ export class Renderer {
       case "dancing":
         this.drawDancingCharacter(ctx, cx, cy, cw, ch, zoom, character.color, animFrame, state.time);
         break;
+      case "walking_coffee":
+        this.drawWalkingCoffeeCharacter(ctx, cx, cy, cw, ch, zoom, character.color, animFrame, state.time);
+        break;
+      case "waving":
+        this.drawWavingCharacter(ctx, cx, cy, cw, ch, zoom, character.color, animFrame, state.time);
+        break;
+      case "sitting_floor":
+        this.drawSittingFloorCharacter(ctx, cx, cy, cw, ch, zoom, character.color, animFrame);
+        break;
+    }
+
+    // Calcula posicao real da cabeca por estado (para acessorios)
+    const headSize = cw * 0.6;
+    let accHeadX = cx + (cw - headSize) / 2;
+    let accHeadY = cy;
+
+    if (charState === "dancing") {
+      const phase = animFrame % 4;
+      const leanX = phase < 2 ? -1.5 * zoom : 1.5 * zoom;
+      const bounceY = phase % 2 === 0 ? -2 * zoom : 0;
+      accHeadX = cx + leanX + (cw - headSize) / 2;
+      accHeadY = cy + bounceY;
+    } else if (charState === "sitting_floor") {
+      accHeadY = cy + ch * 0.25;
+    } else if (charState === "walking" || charState === "walking_coffee" || charState === "drinking_coffee") {
+      const bounce = animFrame % 2 === 0 ? 0 : -1 * zoom;
+      accHeadY = cy + bounce;
     }
 
     // Accessories — draw on top of character
-    const headSize = cw * 0.6;
-    const headX = cx + (cw - headSize) / 2;
-
-    // Hat (on top of head)
     if (character.hat && character.hat !== "none" && charState !== "sleeping") {
-      this.drawHat(ctx, headX, cy, headSize, zoom, character.hat);
+      this.drawHat(ctx, accHeadX, accHeadY, headSize, zoom, character.hat);
     }
 
-    // Glasses (on face)
     if (character.glasses && character.glasses !== "none" && charState !== "sleeping") {
-      this.drawGlasses(ctx, headX, cy, headSize, zoom, character.glasses);
+      this.drawGlasses(ctx, accHeadX, accHeadY, headSize, zoom, character.glasses);
     }
 
     // Name label
     ctx.fillStyle = "#ffffff";
     ctx.font = `${Math.max(5, 5 * zoom)}px "Press Start 2P", monospace`;
     ctx.textAlign = "center";
-    const nameY = character.hat && character.hat !== "none" && charState !== "sleeping" ? cy - 10 * zoom : cy - 6 * zoom;
+    const nameY = character.hat && character.hat !== "none" && charState !== "sleeping" ? accHeadY - 10 * zoom : accHeadY - 6 * zoom;
     ctx.fillText(character.name, cx + cw / 2, nameY);
     ctx.textAlign = "start";
 
-    // Status dot
+    // Status dot — acompanha posicao da cabeca, sobe no waving pra nao cobrir a mao
     const dotSize = 3 * zoom;
+    const dotY = charState === "waving" ? accHeadY - 6 * zoom : accHeadY + 2 * zoom;
     ctx.fillStyle = STATUS_COLORS[status];
     ctx.beginPath();
-    ctx.arc(cx + cw + 2 * zoom, cy + 2 * zoom, dotSize, 0, Math.PI * 2);
+    ctx.arc(cx + cw + 2 * zoom, dotY, dotSize, 0, Math.PI * 2);
     ctx.fill();
   }
 
@@ -996,6 +1131,134 @@ export class Renderer {
     ctx.fillText("♫", x + leanX + w + 4 * zoom, noteY2);
     ctx.globalAlpha = 1;
     ctx.textAlign = "start";
+  }
+
+  private drawWalkingCoffeeCharacter(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    zoom: number,
+    color: string,
+    frame: number,
+    time: number
+  ): void {
+    // Corpo com bounce de caminhada
+    const bounce = frame % 2 === 0 ? 0 : -1 * zoom;
+    this.drawPixelBody(ctx, x, y + bounce, w, h, zoom, color);
+
+    // Pernas andando
+    const legSwing = frame % 2 === 0 ? 1 : -1;
+    ctx.fillStyle = COLORS.pants;
+    ctx.fillRect(x + 2 * zoom + legSwing * zoom, y + bounce + h * 0.75, 3 * zoom, h * 0.25);
+    ctx.fillRect(x + w - 5 * zoom - legSwing * zoom, y + bounce + h * 0.75, 3 * zoom, h * 0.25);
+
+    // Braco esquerdo balancando
+    ctx.fillStyle = this.skinColor;
+    ctx.fillRect(x - 1 * zoom, y + h * 0.4 + legSwing * 2 * zoom + bounce, 2 * zoom, 4 * zoom);
+
+    // Braco direito segurando cafe
+    ctx.fillStyle = this.skinColor;
+    ctx.fillRect(x + w - 1 * zoom, y + h * 0.38 + bounce, 2 * zoom, 5 * zoom);
+
+    // Copo de cafe na mao direita
+    const cupX = x + w + 1 * zoom;
+    const cupY = y + h * 0.35 + bounce;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(cupX, cupY, 4 * zoom, 6 * zoom);
+    ctx.fillStyle = COLORS.coffeeCup;
+    ctx.fillRect(cupX + 0.5 * zoom, cupY + 1.5 * zoom, 3 * zoom, 4 * zoom);
+
+    // Fumaca do cafe
+    ctx.fillStyle = COLORS.steam;
+    ctx.globalAlpha = 0.5;
+    const steamOff = Math.floor(time * 2) % 3;
+    ctx.fillRect(cupX + 1 * zoom, cupY - (2 + steamOff) * zoom, 1 * zoom, 1 * zoom);
+    ctx.fillRect(cupX + 2.5 * zoom, cupY - (3 + steamOff) * zoom, 1 * zoom, 1 * zoom);
+    ctx.globalAlpha = 1;
+  }
+
+  private drawWavingCharacter(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    zoom: number,
+    color: string,
+    frame: number,
+    _time: number
+  ): void {
+    this.drawPixelBody(ctx, x, y, w, h, zoom, color);
+
+    // Braco esquerdo normal
+    ctx.fillStyle = this.skinColor;
+    ctx.fillRect(x - 1 * zoom, y + h * 0.4, 2 * zoom, 5 * zoom);
+
+    // Braco direito acenando (sobe e desce)
+    const wavePhase = frame % 4;
+    const waveY = wavePhase < 2 ? -3 * zoom : -1 * zoom;
+    const waveX = wavePhase === 1 || wavePhase === 3 ? 1 * zoom : 0;
+    ctx.fillStyle = this.skinColor;
+    ctx.fillRect(x + w - 1 * zoom + waveX, y + h * 0.15 + waveY, 2 * zoom, 5 * zoom);
+
+    // Mao aberta (retangulo maior no topo do braco)
+    ctx.fillRect(x + w - 1.5 * zoom + waveX, y + h * 0.1 + waveY, 3 * zoom, 3 * zoom);
+
+    // Texto "Hi!" flutuando
+    if (frame % 4 < 3) {
+      ctx.fillStyle = "#f1c40f";
+      ctx.globalAlpha = 0.8;
+      ctx.font = `${Math.max(5, 5 * zoom)}px "Press Start 2P", monospace`;
+      ctx.textAlign = "center";
+      ctx.fillText("Hi!", x + w + 4 * zoom, y + h * 0.05);
+      ctx.textAlign = "start";
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  private drawSittingFloorCharacter(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    zoom: number,
+    color: string,
+    _frame: number
+  ): void {
+    // Sentado no chao — corpo mais baixo
+    const sitY = y + h * 0.25;
+
+    // Cabeca
+    ctx.fillStyle = this.skinColor;
+    const headSize = w * 0.6;
+    const headX = x + (w - headSize) / 2;
+    ctx.fillRect(headX, sitY, headSize, headSize);
+
+    // Cabelo
+    ctx.fillStyle = this.hairColor;
+    ctx.fillRect(headX, sitY, headSize, 3 * zoom);
+
+    // Olhos
+    ctx.fillStyle = "#000000";
+    ctx.fillRect(headX + 2 * zoom, sitY + 4 * zoom, 1.5 * zoom, 1.5 * zoom);
+    ctx.fillRect(headX + headSize - 3.5 * zoom, sitY + 4 * zoom, 1.5 * zoom, 1.5 * zoom);
+
+    // Corpo
+    const bodyY = sitY + headSize + 1 * zoom;
+    ctx.fillStyle = color;
+    ctx.fillRect(x + 1 * zoom, bodyY, w - 2 * zoom, h * 0.2);
+
+    // Pernas esticadas para frente
+    ctx.fillStyle = COLORS.pants;
+    ctx.fillRect(x, bodyY + h * 0.2, w, h * 0.12);
+
+    // Bracos apoiados no chao
+    ctx.fillStyle = this.skinColor;
+    ctx.fillRect(x - 2 * zoom, bodyY + h * 0.1, 3 * zoom, 3 * zoom);
+    ctx.fillRect(x + w - 1 * zoom, bodyY + h * 0.1, 3 * zoom, 3 * zoom);
   }
 
   private renderCoffeeArea(
