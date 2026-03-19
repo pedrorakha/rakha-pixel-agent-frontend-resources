@@ -442,6 +442,9 @@ function MemberCard({
           status={member.status}
           hat={member.hat}
           glasses={member.glasses}
+          customShirt={member.colorShirt}
+          customHair={member.colorHair}
+          customSkin={member.colorSkin}
         />
 
         {/* Info */}

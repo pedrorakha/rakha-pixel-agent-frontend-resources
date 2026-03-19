@@ -668,37 +668,40 @@ export class Renderer {
     this.hairColor = character.colorHair || COLORS.hair;
     this.currentHairStyle = character.hairStyle || "short";
 
+    // Usa colorShirt customizado, com fallback para color (sprite default)
+    const shirtColor = character.colorShirt || character.color;
+
     // Draw character based on state
     switch (charState) {
       case "typing":
-        this.drawTypingCharacter(ctx, cx, cy, cw, ch, zoom, character.color, animFrame);
+        this.drawTypingCharacter(ctx, cx, cy, cw, ch, zoom, shirtColor, animFrame);
         break;
       case "focused":
-        this.drawFocusedCharacter(ctx, cx, cy, cw, ch, zoom, character.color, animFrame);
+        this.drawFocusedCharacter(ctx, cx, cy, cw, ch, zoom, shirtColor, animFrame);
         break;
       case "drinking_coffee":
-        this.drawCoffeeCharacter(ctx, cx, cy, cw, ch, zoom, character.color, animFrame, state.time);
+        this.drawCoffeeCharacter(ctx, cx, cy, cw, ch, zoom, shirtColor, animFrame, state.time);
         break;
       case "sleeping":
-        this.drawSleepingCharacter(ctx, cx, cy, cw, ch, zoom, character.color, animFrame, state.time);
+        this.drawSleepingCharacter(ctx, cx, cy, cw, ch, zoom, shirtColor, animFrame, state.time);
         break;
       case "walking":
-        this.drawWalkingCharacter(ctx, cx, cy, cw, ch, zoom, character.color, animFrame);
+        this.drawWalkingCharacter(ctx, cx, cy, cw, ch, zoom, shirtColor, animFrame);
         break;
       case "idle":
-        this.drawIdleCharacter(ctx, cx, cy, cw, ch, zoom, character.color, animFrame);
+        this.drawIdleCharacter(ctx, cx, cy, cw, ch, zoom, shirtColor, animFrame);
         break;
       case "dancing":
-        this.drawDancingCharacter(ctx, cx, cy, cw, ch, zoom, character.color, animFrame, state.time);
+        this.drawDancingCharacter(ctx, cx, cy, cw, ch, zoom, shirtColor, animFrame, state.time);
         break;
       case "walking_coffee":
-        this.drawWalkingCoffeeCharacter(ctx, cx, cy, cw, ch, zoom, character.color, animFrame, state.time);
+        this.drawWalkingCoffeeCharacter(ctx, cx, cy, cw, ch, zoom, shirtColor, animFrame, state.time);
         break;
       case "waving":
-        this.drawWavingCharacter(ctx, cx, cy, cw, ch, zoom, character.color, animFrame, state.time);
+        this.drawWavingCharacter(ctx, cx, cy, cw, ch, zoom, shirtColor, animFrame, state.time);
         break;
       case "sitting_floor":
-        this.drawSittingFloorCharacter(ctx, cx, cy, cw, ch, zoom, character.color, animFrame);
+        this.drawSittingFloorCharacter(ctx, cx, cy, cw, ch, zoom, shirtColor, animFrame);
         break;
     }
 

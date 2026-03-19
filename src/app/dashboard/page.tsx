@@ -17,6 +17,7 @@ interface ApiMember {
   current_status: string;
   current_animation: string;
   is_active: boolean;
+  color_shirt: string;
   created_at: string;
   updated_at: string;
 }
@@ -74,7 +75,7 @@ export default function DashboardOverview() {
         id: m.id,
         name: m.name,
         discordId: m.discord_id,
-        color: SPRITE_COLOR_MAP[m.character_sprite] ?? "#3498db",
+        color: m.color_shirt || SPRITE_COLOR_MAP[m.character_sprite] || "#3498db",
         sprite: m.character_sprite,
         deskId: m.desk_id,
         deskLabel: m.desk_id ? deskMap.get(m.desk_id) ?? null : null,
