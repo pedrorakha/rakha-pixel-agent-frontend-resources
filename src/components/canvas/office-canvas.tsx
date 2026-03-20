@@ -1436,7 +1436,7 @@ export function OfficeCanvas({ sidebarOpen, onToggleSidebar, onOpenVisualEditor 
         <div className="flex items-center justify-center gap-3 px-4 py-2">
           {/* LEFT: mic, sound, chat toggle, reactions */}
           <div className="flex items-center gap-1.5 shrink-0">
-            {!isSpectator && selectedMemberId && myRoom >= 0 && (
+            {!isSpectator && selectedMemberId && (
               <>
                 <button onClick={toggleMute} className={`flex items-center justify-center w-8 h-8 border-2 transition-colors ${isMuted ? "bg-red-900/50 border-red-600/50 hover:border-red-500" : "bg-pixel-panel/50 border-pixel-panel hover:border-pixel-accent"}`} title={isMuted ? "MIC OFF" : "MIC ON"}>
                   <span className="text-sm">{isMuted ? "🔇" : "🎙️"}</span>
