@@ -60,6 +60,17 @@ interface PlayerPosition {
   state: string;
 }
 
+export interface PlayerInteractPayload {
+  fromId: string;
+  toId: string;
+  action: string;
+  timestamp: number;
+}
+
+export interface DoorStatusPayload {
+  lockedRooms: number[];
+}
+
 interface UseMultiplayerSyncOptions {
   playerId: string | null;
   getPlayerPosition: () => PlayerPosition | null;
@@ -70,6 +81,8 @@ interface UseMultiplayerSyncOptions {
   onReaction: (payload: PlayerReactionPayload) => void;
   onVisualUpdate: (payload: PlayerVisualPayload) => void;
   onRemoteJoin?: (memberId: string) => void;
+  onDoorStatus?: (payload: DoorStatusPayload) => void;
+  onInteract?: (payload: PlayerInteractPayload) => void;
 }
 
 export function useMultiplayerSync({
@@ -82,6 +95,8 @@ export function useMultiplayerSync({
   onReaction,
   onVisualUpdate,
   onRemoteJoin,
+  onDoorStatus,
+  onInteract,
 }: UseMultiplayerSyncOptions) {
   const socketRef = useRef<Socket | null>(null);
   const lastMoveRef = useRef<number>(0);
@@ -99,6 +114,8 @@ export function useMultiplayerSync({
   const onReactionRef = useRef(onReaction);
   const onVisualUpdateRef = useRef(onVisualUpdate);
   const onRemoteJoinRef = useRef(onRemoteJoin);
+  const onDoorStatusRef = useRef(onDoorStatus);
+  const onInteractRef = useRef(onInteract);
 
   onRemoteMoveRef.current = onRemoteMove;
   onRemoteJumpRef.current = onRemoteJump;
@@ -107,6 +124,8 @@ export function useMultiplayerSync({
   onReactionRef.current = onReaction;
   onVisualUpdateRef.current = onVisualUpdate;
   onRemoteJoinRef.current = onRemoteJoin;
+  onDoorStatusRef.current = onDoorStatus;
+  onInteractRef.current = onInteract;
 
   // So conecta quando tiver playerId
   useEffect(() => {
@@ -177,6 +196,14 @@ export function useMultiplayerSync({
 
     socket.on("player:visual", (data: PlayerVisualPayload) => {
       onVisualUpdateRef.current(data);
+    });
+
+    socket.on("door:status", (data: DoorStatusPayload) => {
+      onDoorStatusRef.current?.(data);
+    });
+
+    socket.on("player:interact", (data: PlayerInteractPayload) => {
+      onInteractRef.current?.(data);
     });
 
     socket.on("player:leave", (data: PlayerLeavePayload) => {
@@ -274,5 +301,32 @@ export function useMultiplayerSync({
     []
   );
 
-  return { emitMove, emitJump, emitChat, emitReaction, emitVisual, onlinePlayers };
+  const emitDoorToggle = useCallback(
+    (roomIndex: number) => {
+      const pid = playerIdRef.current;
+      if (!socketRef.current?.connected || !pid) return;
+
+      socketRef.current.emit("door:toggle", {
+        memberId: pid,
+        roomIndex,
+      });
+    },
+    []
+  );
+
+  const emitInteract = useCallback(
+    (toId: string, action: string) => {
+      const pid = playerIdRef.current;
+      if (!socketRef.current?.connected || !pid) return;
+
+      socketRef.current.emit("player:interact", {
+        fromId: pid,
+        toId,
+        action,
+      });
+    },
+    []
+  );
+
+  return { emitMove, emitJump, emitChat, emitReaction, emitVisual, emitDoorToggle, emitInteract, onlinePlayers };
 }

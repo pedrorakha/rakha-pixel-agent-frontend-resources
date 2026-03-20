@@ -111,26 +111,59 @@ function CharacterMiniPreview({
       const headSize = cw * 0.65;
       const headX = cx + (cw - headSize) / 2;
 
-      // Head
+      // Sombra
+      ctx.fillStyle = "rgba(0,0,0,0.1)";
+      ctx.fillRect(cx + z * 0.5, cy + ch - z, cw - z, z * 1.2);
+
+      // Head — arredondada
       ctx.fillStyle = colorSkin;
-      ctx.fillRect(headX, cy, headSize, headSize);
+      ctx.fillRect(headX + z * 0.5, cy, headSize - z, headSize);
+      ctx.fillRect(headX, cy + z * 0.5, headSize, headSize - z);
+
+      // Sombra lateral
+      ctx.fillStyle = "rgba(0,0,0,0.07)";
+      ctx.fillRect(headX + headSize - z, cy + z, z * 0.6, headSize - 2 * z);
 
       // Hair
       drawMiniHair(ctx, headX, cy, headSize, z, hairStyle, colorHair);
 
-      // Eyes
-      ctx.fillStyle = "#000";
-      ctx.fillRect(headX + z * 1, cy + headSize * 0.4, z * 0.7, z * 0.7);
-      ctx.fillRect(headX + headSize - z * 1.7, cy + headSize * 0.4, z * 0.7, z * 0.7);
+      // Eyes — com brilho
+      ctx.fillStyle = "#1a1a2e";
+      ctx.fillRect(headX + z * 1.2, cy + headSize * 0.4, z * 0.8, z * 0.8);
+      ctx.fillRect(headX + headSize - z * 2, cy + headSize * 0.4, z * 0.8, z * 0.8);
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(headX + z * 1.2, cy + headSize * 0.4, z * 0.3, z * 0.3);
+      ctx.fillRect(headX + headSize - z * 2, cy + headSize * 0.4, z * 0.3, z * 0.3);
 
-      // Body
-      const bodyY = cy + headSize + z * 0.3;
+      // Boquinha
+      ctx.fillStyle = "rgba(0,0,0,0.06)";
+      ctx.fillRect(headX + headSize / 2 - z * 0.3, cy + headSize * 0.7, z * 0.8, z * 0.3);
+
+      // Pescoco
+      ctx.fillStyle = colorSkin;
+      ctx.fillRect(cx + cw / 2 - z * 0.4, cy + headSize - z * 0.2, z, z);
+
+      // Body — com ombros e gola
+      const bodyY = cy + headSize + z * 0.5;
+      const bodyW = cw - z;
+      const bodyH = ch * 0.32;
       ctx.fillStyle = colorShirt;
-      ctx.fillRect(cx + z * 0.5, bodyY, cw - z * 1, ch * 0.35);
+      ctx.fillRect(cx + z * 0.5, bodyY, bodyW, bodyH);
+      ctx.fillStyle = "rgba(0,0,0,0.08)";
+      ctx.fillRect(cx + cw / 2 - z * 0.3, bodyY, z * 0.6, z * 1.2);
 
-      // Pants
+      // Calca com pernas
+      const pantsY = bodyY + bodyH;
+      const pantsH = ch * 0.18;
+      const legW = (bodyW - z * 0.4) / 2;
       ctx.fillStyle = COLORS.pants;
-      ctx.fillRect(cx + z * 0.5, bodyY + ch * 0.35, cw - z * 1, ch * 0.2);
+      ctx.fillRect(cx + z * 0.5, pantsY, legW, pantsH);
+      ctx.fillRect(cx + z * 0.5 + legW + z * 0.4, pantsY, legW, pantsH);
+
+      // Sapatos
+      ctx.fillStyle = "#222";
+      ctx.fillRect(cx + z * 0.3, pantsY + pantsH, legW + z * 0.3, z * 0.6);
+      ctx.fillRect(cx + z * 0.5 + legW + z * 0.2, pantsY + pantsH, legW + z * 0.3, z * 0.6);
 
       // Arms typing
       const armOff = frameRef.current % 2 === 0 ? 0 : -z * 0.7;

@@ -550,37 +550,72 @@ function CharacterPreview({
       const cw = CHARACTER_WIDTH * z * 0.7;
       const ch = CHARACTER_HEIGHT * z * 0.7;
 
-      // Head
+      // Sombra no chao
+      ctx.fillStyle = "rgba(0,0,0,0.1)";
+      ctx.fillRect(cx + z * 0.5, cy + ch - z, cw - z, z * 1.5);
+
+      // Head — arredondada
       const headSize = cw * 0.65;
       const headX = cx + (cw - headSize) / 2;
       ctx.fillStyle = skinC;
-      ctx.fillRect(headX, cy, headSize, headSize);
+      ctx.fillRect(headX + z * 0.5, cy, headSize - z, headSize);
+      ctx.fillRect(headX, cy + z * 0.5, headSize, headSize - z);
+
+      // Sombra lateral
+      const skinShadow = "rgba(0,0,0,0.08)";
+      ctx.fillStyle = skinShadow;
+      ctx.fillRect(headX + headSize - z * 1.2, cy + z * 1.5, z * 0.7, headSize - 3 * z);
 
       // Hair
       ctx.fillStyle = hairC;
-      ctx.fillRect(headX, cy, headSize, z * 1.3);
-      ctx.fillRect(headX, cy, z * 1, headSize * 0.5);
-      ctx.fillRect(headX + headSize - z * 1, cy, z * 1, headSize * 0.5);
+      ctx.fillRect(headX, cy, headSize, z * 1.5);
+      ctx.fillRect(headX, cy, z * 1.2, headSize * 0.5);
+      ctx.fillRect(headX + headSize - z * 1.2, cy, z * 1.2, headSize * 0.5);
 
-      // Eyes
+      // Eyes — com brilho
       if (charState !== "sleeping") {
-        ctx.fillStyle = "#000";
-        ctx.fillRect(headX + z * 1, cy + headSize * 0.4, z * 0.7, z * 0.7);
-        ctx.fillRect(headX + headSize - z * 1.7, cy + headSize * 0.4, z * 0.7, z * 0.7);
+        ctx.fillStyle = "#1a1a2e";
+        ctx.fillRect(headX + z * 1.2, cy + headSize * 0.4, z * 1, z * 1);
+        ctx.fillRect(headX + headSize - z * 2.2, cy + headSize * 0.4, z * 1, z * 1);
+        ctx.fillStyle = "#fff";
+        ctx.fillRect(headX + z * 1.2, cy + headSize * 0.4, z * 0.4, z * 0.4);
+        ctx.fillRect(headX + headSize - z * 2.2, cy + headSize * 0.4, z * 0.4, z * 0.4);
       } else {
         ctx.fillStyle = "#000";
-        ctx.fillRect(headX + z * 0.8, cy + headSize * 0.5, z * 1, 1);
-        ctx.fillRect(headX + headSize - z * 1.8, cy + headSize * 0.5, z * 1, 1);
+        ctx.fillRect(headX + z * 0.8, cy + headSize * 0.5, z * 1.2, z * 0.3);
+        ctx.fillRect(headX + headSize - z * 2, cy + headSize * 0.5, z * 1.2, z * 0.3);
       }
 
-      // Body
-      const bodyY = cy + headSize + z * 0.3;
-      ctx.fillStyle = shirtC;
-      ctx.fillRect(cx + z * 0.5, bodyY, cw - z * 1, ch * 0.35);
+      // Boquinha
+      ctx.fillStyle = skinShadow;
+      ctx.fillRect(headX + headSize / 2 - z * 0.3, cy + headSize * 0.7, z, z * 0.3);
 
-      // Pants
+      // Pescoco
+      ctx.fillStyle = skinC;
+      ctx.fillRect(cx + cw / 2 - z * 0.5, cy + headSize - z * 0.3, z * 1.2, z * 1.2);
+
+      // Body — com ombros
+      const bodyY = cy + headSize + z * 0.5;
+      const bodyW = cw - z;
+      const bodyH = ch * 0.32;
+      ctx.fillStyle = shirtC;
+      ctx.fillRect(cx + z * 0.5, bodyY, bodyW, bodyH);
+      // Gola
+      ctx.fillStyle = "rgba(0,0,0,0.1)";
+      ctx.fillRect(cx + cw / 2 - z * 0.5, bodyY, z, z * 1.5);
+
+      // Calca — com pernas separadas
+      const pantsY = bodyY + bodyH;
+      const pantsH = ch * 0.2;
+      const legW = (bodyW - z * 0.5) / 2;
       ctx.fillStyle = COLORS.pants;
-      ctx.fillRect(cx + z * 0.5, bodyY + ch * 0.35, cw - z * 1, ch * 0.2);
+      ctx.fillRect(cx + z * 0.5, pantsY, legW, pantsH);
+      ctx.fillRect(cx + z * 0.5 + legW + z * 0.5, pantsY, legW, pantsH);
+
+      // Sapatos
+      ctx.fillStyle = "#222";
+      ctx.fillRect(cx + z * 0.3, pantsY + pantsH, legW + z * 0.3, z * 0.7);
+      ctx.fillRect(cx + z * 0.5 + legW + z * 0.3, pantsY + pantsH, legW + z * 0.3, z * 0.7);
 
       // State-specific
       if (charState === "typing") {

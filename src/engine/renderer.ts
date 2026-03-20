@@ -12,6 +12,10 @@ import {
   ROOM_FURNITURE,
   ROOMS,
   MEETING_ROOM_INDEX,
+  CAFE_ROOM_INDEX,
+  ROOM_DOORS,
+  GARDEN,
+  DOG_POSITION,
 } from "@/lib/constants";
 import { Character, CharacterState, AccessoryHat, AccessoryGlasses, HairStyle } from "@/types/character";
 import { Desk } from "@/types/office";
@@ -29,6 +33,7 @@ export class Renderer {
   private skinColor: string = COLORS.skin;
   private hairColor: string = COLORS.hair;
   private currentHairStyle: HairStyle = "short";
+  private currentDirection: "up" | "down" | "left" | "right" = "down";
 
   constructor(tilemap: Tilemap) {
     this.tilemap = tilemap;
@@ -47,7 +52,10 @@ export class Renderer {
     chatBubbles?: ChatBubble[],
     onlinePlayers?: Set<string>,
     reactions?: FloatingReaction[],
-    footprints?: Footprint[]
+    footprints?: Footprint[],
+    lockedDoors?: Set<number>,
+    playerNearDoorRoom?: number,
+    dogPetFrame?: number
   ): void {
     const ctx = this.ctx;
     if (!ctx) return;
@@ -69,11 +77,34 @@ export class Renderer {
 
     // Layer 2: Room furniture (beds, coffee corners, plants, rugs, bookshelves)
     for (const rf of ROOM_FURNITURE) {
-      this.renderRoomFurniture(ctx, state, rf);
+      // Procura desk do banco para este room e usa o label dele
+      const deskForRoom = desks.find(
+        (d) => d.gridX === rf.desk.x && d.gridY === rf.desk.y
+      );
+      this.renderRoomFurniture(ctx, state, rf, deskForRoom?.label);
     }
 
     // Layer 2.5: Meeting room furniture
     this.renderMeetingRoom(ctx, state);
+
+    // Layer 2.6: Café room furniture
+    this.renderCafeRoom(ctx, state);
+
+    // Layer 2.7: Garden decorations
+    this.renderGarden(ctx, state);
+
+    // Layer 2.8: Dog
+    this.renderDog(ctx, state, dogPetFrame ?? -1);
+
+    // Layer 2.9: Door overlays (todas as rooms)
+    if (lockedDoors) {
+      Array.from(lockedDoors).forEach((roomIdx) => {
+        this.renderLockedDoor(ctx, state, roomIdx);
+      });
+    }
+    if (playerNearDoorRoom !== undefined && playerNearDoorRoom >= 0) {
+      this.renderDoorHighlight(ctx, state, playerNearDoorRoom, lockedDoors?.has(playerNearDoorRoom) ?? false);
+    }
 
     // Layer 3: Desks (bigger 3x2)
     for (const desk of desks) {
@@ -255,68 +286,85 @@ export class Renderer {
     const px = desk.gridX * TILE_SIZE;
     const py = desk.gridY * TILE_SIZE;
     const { x, y } = this.worldToScreen(state, px, py);
-    const zoom = state.camera.zoom;
-    const dw = DESK_WIDTH * TILE_SIZE * zoom;
-    const dh = DESK_HEIGHT * TILE_SIZE * zoom;
+    const z = state.camera.zoom;
+    const dw = DESK_WIDTH * TILE_SIZE * z;
+    const dh = DESK_HEIGHT * TILE_SIZE * z;
 
-    // Desk surface
+    // Sombra da mesa
+    ctx.fillStyle = "rgba(0,0,0,0.08)";
+    ctx.fillRect(x + z, y + dh, dw, 2 * z);
+
+    // Mesa — superficie com borda arredondada
     ctx.fillStyle = COLORS.desk;
-    ctx.fillRect(x, y, dw, dh);
-
-    // Desk top highlight
+    ctx.fillRect(x + z, y, dw - 2 * z, dh);
+    ctx.fillRect(x, y + z, dw, dh - 2 * z);
+    // Highlight superior
     ctx.fillStyle = COLORS.deskLight;
-    ctx.fillRect(x + 1 * zoom, y + 1 * zoom, dw - 2 * zoom, 2 * zoom);
-
-    // Desk shadow
+    ctx.fillRect(x + 2 * z, y + z, dw - 4 * z, 2 * z);
+    // Borda inferior
     ctx.fillStyle = COLORS.deskDark;
-    ctx.fillRect(x, y + dh - 2 * zoom, dw, 2 * zoom);
+    ctx.fillRect(x + z, y + dh - 2 * z, dw - 2 * z, 2 * z);
+    // Veio da madeira
+    ctx.fillStyle = "rgba(0,0,0,0.05)";
+    ctx.fillRect(x + 4 * z, y + 4 * z, dw - 8 * z, z);
+    ctx.fillRect(x + 6 * z, y + 7 * z, dw - 12 * z, z);
 
-    // Monitor
-    const monW = 10 * zoom;
-    const monH = 8 * zoom;
+    // Monitor — com borda fina e glow
+    const monW = 12 * z;
+    const monH = 9 * z;
     const monX = x + (dw - monW) / 2;
-    const monY = y - monH + 2 * zoom;
+    const monY = y - monH + 2 * z;
 
-    // Monitor body
+    // Glow atras do monitor
+    ctx.fillStyle = "rgba(15, 52, 96, 0.15)";
+    ctx.fillRect(monX - z, monY - z, monW + 2 * z, monH + 2 * z);
+
+    // Corpo do monitor
     ctx.fillStyle = COLORS.monitor;
     ctx.fillRect(monX, monY, monW, monH);
-
-    // Monitor screen
+    // Tela — com gradiente sutil
     ctx.fillStyle = COLORS.monitorScreenOn;
-    ctx.fillRect(
-      monX + 1 * zoom,
-      monY + 1 * zoom,
-      monW - 2 * zoom,
-      monH - 3 * zoom
-    );
+    ctx.fillRect(monX + z, monY + z, monW - 2 * z, monH - 3 * z);
+    // Reflexo na tela
+    ctx.fillStyle = "rgba(255,255,255,0.06)";
+    ctx.fillRect(monX + 2 * z, monY + 2 * z, monW - 4 * z, 2 * z);
+    // Indicador de energia
+    ctx.fillStyle = "#2ecc71";
+    ctx.fillRect(monX + monW - 2.5 * z, monY + monH - 2 * z, z, z);
 
-    // Monitor stand
+    // Haste do monitor
     ctx.fillStyle = COLORS.monitor;
-    ctx.fillRect(
-      monX + monW / 2 - 1 * zoom,
-      monY + monH,
-      2 * zoom,
-      2 * zoom
-    );
+    ctx.fillRect(monX + monW / 2 - 1.5 * z, monY + monH, 3 * z, 2 * z);
+    // Base do monitor
+    ctx.fillRect(monX + monW / 2 - 3 * z, monY + monH + 2 * z, 6 * z, z);
 
-    // Desk label
-    ctx.fillStyle = "rgba(255,255,255,0.4)";
-    ctx.font = `${Math.max(6, 6 * zoom)}px "Press Start 2P", monospace`;
-    ctx.textAlign = "center";
-    ctx.fillText(desk.label, x + dw / 2, y + dh + 8 * zoom);
-    ctx.textAlign = "start";
+    // Teclado — com teclas
+    const kbW = 10 * z;
+    const kbH = 3 * z;
+    const kbX = x + (dw - kbW) / 2;
+    const kbY = y + dh - 5 * z;
+    ctx.fillStyle = "#333";
+    ctx.fillRect(kbX, kbY, kbW, kbH);
+    ctx.fillStyle = "#444";
+    // Teclas (3 fileiras)
+    for (let r = 0; r < 2; r++) {
+      for (let c = 0; c < 5; c++) {
+        ctx.fillRect(kbX + (0.5 + c * 1.8) * z, kbY + (0.5 + r * 1.2) * z, 1.2 * z, z * 0.8);
+      }
+    }
 
-    // Keyboard in front of monitor
-    const kbW = 8 * zoom;
-    const kbH = 3 * zoom;
-    ctx.fillStyle = COLORS.keyboard ?? "#2a2a2a";
-    ctx.fillRect(x + (dw - kbW) / 2, y + dh - 6 * zoom, kbW, kbH);
+    // Mouse
+    ctx.fillStyle = "#444";
+    ctx.fillRect(kbX + kbW + z, kbY + z * 0.5, 2 * z, 2.5 * z);
+    ctx.fillStyle = "#555";
+    ctx.fillRect(kbX + kbW + z * 1.3, kbY + z * 0.8, z * 0.5, z);
   }
 
   private renderRoomFurniture(
     ctx: CanvasRenderingContext2D,
     state: GameState,
-    rf: (typeof ROOM_FURNITURE)[number]
+    rf: (typeof ROOM_FURNITURE)[number],
+    deskLabel?: string
   ): void {
     const zoom = state.camera.zoom;
     const ts = TILE_SIZE * zoom;
@@ -426,9 +474,10 @@ export class Renderer {
       ctx.fillRect(sx, sy + shelfH / 2 - zoom, shelfW, 2 * zoom);
     }
 
-    // --- Room label ---
+    // --- Room label (usa desk label do banco quando disponivel) ---
     {
       const room = ROOMS[rf.roomIndex];
+      const displayLabel = deskLabel || room.label;
       const { x: sx, y: sy } = this.worldToScreen(
         state,
         (room.x + room.w / 2) * TILE_SIZE,
@@ -437,7 +486,7 @@ export class Renderer {
       ctx.fillStyle = "rgba(255,255,255,0.15)";
       ctx.font = `${Math.max(5, 5 * zoom)}px "Press Start 2P", monospace`;
       ctx.textAlign = "center";
-      ctx.fillText(room.label, sx, sy);
+      ctx.fillText(displayLabel, sx, sy);
       ctx.textAlign = "start";
     }
   }
@@ -452,76 +501,52 @@ export class Renderer {
     const zoom = state.camera.zoom;
     const ts = TILE_SIZE * zoom;
 
-    // Mesa de reuniao grande no centro (9 wide x 14 tall)
-    const tableW = 9;
-    const tableH = 14;
+    // Mesa de reuniao compacta no centro (7 wide x 4 tall)
+    const tableW = 7;
+    const tableH = 4;
     const tableX = room.x + Math.floor((room.w - tableW) / 2);
     const tableY = room.y + Math.floor((room.h - tableH) / 2);
     const { x: sx, y: sy } = this.worldToScreen(state, tableX * TILE_SIZE, tableY * TILE_SIZE);
     const tw = tableW * ts;
     const th = tableH * ts;
 
-    // Mesa
+    // Mesa — arredondada com detalhes de madeira
     ctx.fillStyle = COLORS.desk;
-    ctx.fillRect(sx, sy, tw, th);
-    // Borda clara no topo
+    ctx.fillRect(sx + zoom, sy, tw - 2 * zoom, th);
+    ctx.fillRect(sx, sy + zoom, tw, th - 2 * zoom);
     ctx.fillStyle = COLORS.deskLight;
-    ctx.fillRect(sx + zoom, sy + zoom, tw - 2 * zoom, 3 * zoom);
-    // Borda escura embaixo
+    ctx.fillRect(sx + 2 * zoom, sy + zoom, tw - 4 * zoom, 3 * zoom);
     ctx.fillStyle = COLORS.deskDark;
-    ctx.fillRect(sx, sy + th - 3 * zoom, tw, 3 * zoom);
-    // Interior da mesa (mais claro)
+    ctx.fillRect(sx + zoom, sy + th - 3 * zoom, tw - 2 * zoom, 3 * zoom);
     ctx.fillStyle = "#9a7420";
-    ctx.fillRect(sx + 3 * zoom, sy + 4 * zoom, tw - 6 * zoom, th - 7 * zoom);
+    ctx.fillRect(sx + 3 * zoom, sy + 5 * zoom, tw - 6 * zoom, th - 8 * zoom);
+    // Veio da madeira
+    ctx.fillStyle = "rgba(0,0,0,0.06)";
+    ctx.fillRect(sx + 5 * zoom, sy + 6 * zoom, tw - 10 * zoom, zoom);
+    ctx.fillRect(sx + 7 * zoom, sy + th / 2, tw - 14 * zoom, zoom);
 
-    // Cadeiras ao redor
-    const chairColor = COLORS.chair;
-    const chairW = 2 * ts;
-    const chairH = 1.5 * ts;
+    // Cadeiras (3 em cima, 3 embaixo) — posicionadas 1 tile acima/abaixo da mesa
+    const chairW = 1.5 * ts;
+    const chairH = 0.8 * ts;
 
-    // Cadeiras no topo (4)
-    for (let i = 0; i < 4; i++) {
-      const cx = sx + (0.5 + i * 2.1) * ts;
-      const cy = sy - chairH - 1 * zoom;
-      ctx.fillStyle = chairColor;
-      ctx.fillRect(cx, cy, chairW, chairH);
+    for (let i = 0; i < 3; i++) {
+      const cx = sx + (0.8 + i * 2.2) * ts;
+      // Cadeiras acima (1 tile de distância)
+      ctx.fillStyle = COLORS.chair;
+      ctx.fillRect(cx, sy - ts + 2 * zoom, chairW, chairH);
       ctx.fillStyle = COLORS.chairSeat;
-      ctx.fillRect(cx + zoom, cy + zoom, chairW - 2 * zoom, chairH - 2 * zoom);
+      ctx.fillRect(cx + zoom, sy - ts + 3 * zoom, chairW - 2 * zoom, chairH - 2 * zoom);
+
+      // Cadeiras abaixo (1 tile de distância)
+      ctx.fillStyle = COLORS.chair;
+      ctx.fillRect(cx, sy + th + ts - chairH - 2 * zoom, chairW, chairH);
+      ctx.fillStyle = COLORS.chairSeat;
+      ctx.fillRect(cx + zoom, sy + th + ts - chairH - zoom, chairW - 2 * zoom, chairH - 2 * zoom);
     }
 
-    // Cadeiras embaixo (4)
-    for (let i = 0; i < 4; i++) {
-      const cx = sx + (0.5 + i * 2.1) * ts;
-      const cy = sy + th + 1 * zoom;
-      ctx.fillStyle = chairColor;
-      ctx.fillRect(cx, cy, chairW, chairH);
-      ctx.fillStyle = COLORS.chairSeat;
-      ctx.fillRect(cx + zoom, cy + zoom, chairW - 2 * zoom, chairH - 2 * zoom);
-    }
-
-    // Cadeiras na esquerda (5)
-    for (let i = 0; i < 5; i++) {
-      const cx = sx - chairH - 1 * zoom;
-      const cy = sy + (0.5 + i * 2.6) * ts;
-      ctx.fillStyle = chairColor;
-      ctx.fillRect(cx, cy, chairH, chairW);
-      ctx.fillStyle = COLORS.chairSeat;
-      ctx.fillRect(cx + zoom, cy + zoom, chairH - 2 * zoom, chairW - 2 * zoom);
-    }
-
-    // Cadeiras na direita (5)
-    for (let i = 0; i < 5; i++) {
-      const cx = sx + tw + 1 * zoom;
-      const cy = sy + (0.5 + i * 2.6) * ts;
-      ctx.fillStyle = chairColor;
-      ctx.fillRect(cx, cy, chairH, chairW);
-      ctx.fillStyle = COLORS.chairSeat;
-      ctx.fillRect(cx + zoom, cy + zoom, chairH - 2 * zoom, chairW - 2 * zoom);
-    }
-
-    // Planta decorativa no canto superior direito
+    // Planta canto superior direito
     const plantX = room.x + room.w - 2;
-    const plantY = room.y + 1;
+    const plantY = room.y;
     const { x: px, y: py } = this.worldToScreen(state, plantX * TILE_SIZE, plantY * TILE_SIZE);
     ctx.fillStyle = COLORS.plantPot;
     ctx.fillRect(px + 3 * zoom, py + 8 * zoom, 10 * zoom, 6 * zoom);
@@ -529,25 +554,354 @@ export class Renderer {
     ctx.fillRect(px + 4 * zoom, py + 2 * zoom, 4 * zoom, 6 * zoom);
     ctx.fillRect(px + 8 * zoom, py + 3 * zoom, 4 * zoom, 5 * zoom);
 
-    // Planta no canto inferior esquerdo
-    const plant2X = room.x + 1;
-    const plant2Y = room.y + room.h - 2;
-    const { x: p2x, y: p2y } = this.worldToScreen(state, plant2X * TILE_SIZE, plant2Y * TILE_SIZE);
-    ctx.fillStyle = COLORS.plantPot;
-    ctx.fillRect(p2x + 3 * zoom, p2y + 8 * zoom, 10 * zoom, 6 * zoom);
-    ctx.fillStyle = COLORS.plant;
-    ctx.fillRect(p2x + 4 * zoom, p2y + 2 * zoom, 4 * zoom, 6 * zoom);
-    ctx.fillRect(p2x + 8 * zoom, p2y + 3 * zoom, 4 * zoom, 5 * zoom);
-
-    // Label "MEETING ROOM"
+    // Label
     const labelX = room.x + room.w / 2;
-    const labelY = room.y + room.h - 1;
+    const labelY = room.y + room.h - 0.5;
     const { x: lx, y: ly } = this.worldToScreen(state, labelX * TILE_SIZE, labelY * TILE_SIZE);
     ctx.fillStyle = "rgba(255,255,255,0.15)";
     ctx.font = `${Math.max(5, 5 * zoom)}px "Press Start 2P", monospace`;
     ctx.textAlign = "center";
     ctx.fillText("MEETING ROOM", lx, ly);
     ctx.textAlign = "start";
+  }
+
+  private renderLockedDoor(
+    ctx: CanvasRenderingContext2D,
+    state: GameState,
+    roomIndex: number
+  ): void {
+    const door = ROOM_DOORS[roomIndex];
+    if (!door) return;
+
+    const zoom = state.camera.zoom;
+    const ts = TILE_SIZE * zoom;
+
+    for (let i = 0; i < door.tiles.length; i++) {
+      const tile = door.tiles[i];
+      const { x: sx, y: sy } = this.worldToScreen(state, tile.x * TILE_SIZE, tile.y * TILE_SIZE);
+
+      ctx.fillStyle = COLORS.doorLocked;
+      ctx.fillRect(sx, sy, ts, ts);
+
+      ctx.fillStyle = COLORS.doorLockedFrame;
+      ctx.fillRect(sx, sy, ts, 2 * zoom);
+      ctx.fillRect(sx, sy + ts - 2 * zoom, ts, 2 * zoom);
+      ctx.fillRect(sx, sy, 2 * zoom, ts);
+      ctx.fillRect(sx + ts - 2 * zoom, sy, 2 * zoom, ts);
+
+      // Fechadura no tile central de cada grupo de 3
+      if (i % 3 === 1) {
+        ctx.fillStyle = "#ff4444";
+        ctx.fillRect(sx + ts / 2 - 2 * zoom, sy + ts / 2 - 2 * zoom, 4 * zoom, 4 * zoom);
+      }
+    }
+  }
+
+  private renderCafeRoom(
+    ctx: CanvasRenderingContext2D,
+    state: GameState
+  ): void {
+    const room = ROOMS[CAFE_ROOM_INDEX];
+    if (!room) return;
+
+    const zoom = state.camera.zoom;
+    const ts = TILE_SIZE * zoom;
+
+    // Balcão do café (canto superior direito, 2x3 vertical)
+    const barX = room.x + room.w - 3;
+    const barY = room.y;
+    const { x: bx, y: by } = this.worldToScreen(state, barX * TILE_SIZE, barY * TILE_SIZE);
+    ctx.fillStyle = COLORS.desk;
+    ctx.fillRect(bx + zoom, by, 2 * ts - 2 * zoom, 3 * ts);
+    ctx.fillRect(bx, by + zoom, 2 * ts, 3 * ts - 2 * zoom);
+    ctx.fillStyle = COLORS.deskLight;
+    ctx.fillRect(bx + 2 * zoom, by + zoom, 2 * ts - 4 * zoom, 2 * zoom);
+    ctx.fillStyle = COLORS.deskDark;
+    ctx.fillRect(bx + zoom, by + 3 * ts - 2 * zoom, 2 * ts - 2 * zoom, 2 * zoom);
+
+    // Máquina de café
+    const { x: mx, y: my } = this.worldToScreen(state, (barX + 0.3) * TILE_SIZE, (barY + 0.3) * TILE_SIZE);
+    ctx.fillStyle = COLORS.coffeeMachine;
+    ctx.fillRect(mx, my, 5 * zoom, 7 * zoom);
+    ctx.fillStyle = "#e74c3c";
+    ctx.fillRect(mx + zoom, my + 2 * zoom, zoom, zoom);
+    ctx.fillStyle = COLORS.mug;
+    ctx.fillRect(mx + 2 * zoom, my + 5 * zoom, 2 * zoom, 2 * zoom);
+
+    // Segunda máquina
+    const { x: m2x, y: m2y } = this.worldToScreen(state, (barX + 0.3) * TILE_SIZE, (barY + 1.5) * TILE_SIZE);
+    ctx.fillStyle = COLORS.coffeeMachine;
+    ctx.fillRect(m2x, m2y, 5 * zoom, 7 * zoom);
+    ctx.fillStyle = "#2ecc71";
+    ctx.fillRect(m2x + zoom, m2y + 2 * zoom, zoom, zoom);
+
+    // 2 mesas com cadeiras
+    const tables = [
+      { x: room.x + 2, y: room.y + 1 },
+      { x: room.x + 7, y: room.y + 1 },
+    ];
+    for (const table of tables) {
+      const { x: tx, y: ty } = this.worldToScreen(state, table.x * TILE_SIZE, table.y * TILE_SIZE);
+      // Sombra da mesa
+      ctx.fillStyle = "rgba(0,0,0,0.08)";
+      ctx.fillRect(tx + 3 * zoom, ty + 2 * ts - 2 * zoom, 3 * ts - 4 * zoom, 2 * zoom);
+
+      // Mesa arredondada
+      ctx.fillStyle = COLORS.coffeeTable;
+      ctx.fillRect(tx + 3 * zoom, ty + 2 * zoom, 3 * ts - 6 * zoom, 2 * ts - 4 * zoom);
+      ctx.fillRect(tx + 2 * zoom, ty + 3 * zoom, 3 * ts - 4 * zoom, 2 * ts - 6 * zoom);
+      // Interior
+      ctx.fillStyle = "#6b4a30";
+      ctx.fillRect(tx + 4 * zoom, ty + 4 * zoom, 3 * ts - 8 * zoom, 2 * ts - 8 * zoom);
+      // Highlight
+      ctx.fillStyle = "rgba(255,255,255,0.08)";
+      ctx.fillRect(tx + 5 * zoom, ty + 5 * zoom, 3 * ts - 12 * zoom, 2 * zoom);
+
+      // Canecas com detalhe
+      ctx.fillStyle = COLORS.mug;
+      ctx.fillRect(tx + 5 * zoom, ty + 6 * zoom, 2.5 * zoom, 3 * zoom);
+      ctx.fillStyle = COLORS.coffeeCup;
+      ctx.fillRect(tx + 5.5 * zoom, ty + 6.5 * zoom, 1.5 * zoom, 2 * zoom);
+      ctx.fillStyle = COLORS.mug;
+      ctx.fillRect(tx + 3 * ts - 9 * zoom, ty + 2 * ts - 10 * zoom, 2.5 * zoom, 3 * zoom);
+
+      // Cadeiras — mais compactas e dentro da area da mesa
+      const cw = ts * 0.8;
+      const ch = ts * 0.5;
+      // Cadeira cima
+      ctx.fillStyle = COLORS.chair;
+      ctx.fillRect(tx + ts + zoom, ty - ch - zoom, cw, ch);
+      ctx.fillStyle = COLORS.chairSeat;
+      ctx.fillRect(tx + ts + 2 * zoom, ty - ch, cw - 2 * zoom, ch - zoom);
+      // Cadeira baixo
+      ctx.fillStyle = COLORS.chair;
+      ctx.fillRect(tx + ts + zoom, ty + 2 * ts + zoom, cw, ch);
+      ctx.fillStyle = COLORS.chairSeat;
+      ctx.fillRect(tx + ts + 2 * zoom, ty + 2 * ts + 2 * zoom, cw - 2 * zoom, ch - zoom);
+    }
+
+    // Planta canto inferior esquerdo
+    const plantX = room.x;
+    const plantY = room.y + room.h - 2;
+    const { x: px, y: py } = this.worldToScreen(state, plantX * TILE_SIZE, plantY * TILE_SIZE);
+    ctx.fillStyle = COLORS.plantPot;
+    ctx.fillRect(px + 3 * zoom, py + 8 * zoom, 10 * zoom, 6 * zoom);
+    ctx.fillStyle = COLORS.plant;
+    ctx.fillRect(px + 4 * zoom, py + 2 * zoom, 4 * zoom, 6 * zoom);
+    ctx.fillRect(px + 8 * zoom, py + 3 * zoom, 4 * zoom, 5 * zoom);
+
+    // Label
+    const cafeLabelX = room.x + room.w / 2;
+    const cafeLabelY = room.y + room.h - 0.5;
+    const { x: clx, y: cly } = this.worldToScreen(state, cafeLabelX * TILE_SIZE, cafeLabelY * TILE_SIZE);
+    ctx.fillStyle = "rgba(255,255,255,0.15)";
+    ctx.font = `${Math.max(5, 5 * zoom)}px "Press Start 2P", monospace`;
+    ctx.textAlign = "center";
+    ctx.fillText("CAFÉ", clx, cly);
+    ctx.textAlign = "start";
+  }
+
+  private renderDoorHighlight(
+    ctx: CanvasRenderingContext2D,
+    state: GameState,
+    roomIndex: number,
+    isLocked: boolean
+  ): void {
+    const door = ROOM_DOORS[roomIndex];
+    if (!door) return;
+
+    const zoom = state.camera.zoom;
+    const ts = TILE_SIZE * zoom;
+    const pulse = Math.sin(state.time * 4) * 0.3 + 0.7;
+
+    for (const tile of door.tiles) {
+      const { x: sx, y: sy } = this.worldToScreen(state, tile.x * TILE_SIZE, tile.y * TILE_SIZE);
+
+      ctx.strokeStyle = isLocked
+        ? `rgba(255, 68, 68, ${pulse})`
+        : `rgba(79, 195, 247, ${pulse})`;
+      ctx.lineWidth = 2 * zoom;
+      ctx.strokeRect(sx + zoom, sy + zoom, ts - 2 * zoom, ts - 2 * zoom);
+    }
+  }
+
+  private renderGarden(
+    ctx: CanvasRenderingContext2D,
+    state: GameState
+  ): void {
+    const zoom = state.camera.zoom;
+    const ts = TILE_SIZE * zoom;
+
+    // Flores espalhadas pela grama
+    const flowers = [
+      { x: GARDEN.x + 1, y: GARDEN.y + 1, color: COLORS.flowerRed },
+      { x: GARDEN.x + 4, y: GARDEN.y + 2, color: COLORS.flowerYellow },
+      { x: GARDEN.x + 8, y: GARDEN.y + 1, color: COLORS.flowerBlue },
+      { x: GARDEN.x + 2, y: GARDEN.y + 5, color: COLORS.flowerPink },
+      { x: GARDEN.x + 10, y: GARDEN.y + 4, color: COLORS.flowerRed },
+      { x: GARDEN.x + 6, y: GARDEN.y + 7, color: COLORS.flowerYellow },
+      { x: GARDEN.x + 11, y: GARDEN.y + 8, color: COLORS.flowerBlue },
+      { x: GARDEN.x + 1, y: GARDEN.y + 8, color: COLORS.flowerPink },
+    ];
+
+    for (const f of flowers) {
+      const { x: fx, y: fy } = this.worldToScreen(state, f.x * TILE_SIZE, f.y * TILE_SIZE);
+      // Caule
+      ctx.fillStyle = COLORS.plantDark;
+      ctx.fillRect(fx + ts / 2 - zoom * 0.5, fy + ts * 0.4, zoom, ts * 0.5);
+      // Petala
+      ctx.fillStyle = f.color;
+      ctx.fillRect(fx + ts / 2 - 2 * zoom, fy + ts * 0.15, 4 * zoom, 4 * zoom);
+      // Centro
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(fx + ts / 2 - zoom * 0.5, fy + ts * 0.25, zoom, zoom);
+    }
+
+    // Arvores (2 arvores nas bordas)
+    const trees = [
+      { x: GARDEN.x, y: GARDEN.y },
+      { x: GARDEN.x + GARDEN.w - 2, y: GARDEN.y + GARDEN.h - 3 },
+      { x: GARDEN.x + 5, y: GARDEN.y + GARDEN.h - 2 },
+    ];
+
+    for (const t of trees) {
+      const { x: tx, y: ty } = this.worldToScreen(state, t.x * TILE_SIZE, t.y * TILE_SIZE);
+      // Tronco
+      ctx.fillStyle = COLORS.treeTrunk;
+      ctx.fillRect(tx + ts * 0.6, ty + ts * 1.2, ts * 0.5, ts * 0.8);
+      // Copa
+      ctx.fillStyle = COLORS.treeLeaf;
+      ctx.fillRect(tx, ty, ts * 1.8, ts * 1.3);
+      ctx.fillStyle = COLORS.treeLeafDark;
+      ctx.fillRect(tx + 2 * zoom, ty + 2 * zoom, ts * 1.4, ts * 0.9);
+      // Highlight
+      ctx.fillStyle = COLORS.grassLight;
+      ctx.fillRect(tx + 3 * zoom, ty + 3 * zoom, ts * 0.5, ts * 0.3);
+    }
+
+    // Cerca no topo do jardim (borda superior)
+    for (let x = GARDEN.x; x < GARDEN.x + GARDEN.w; x++) {
+      const { x: fx, y: fy } = this.worldToScreen(state, x * TILE_SIZE, (GARDEN.y - 0.3) * TILE_SIZE);
+      ctx.fillStyle = COLORS.fence;
+      // Poste vertical
+      if (x % 2 === 0) {
+        ctx.fillRect(fx + ts * 0.35, fy, ts * 0.3, ts * 0.7);
+      }
+      // Barra horizontal
+      ctx.fillRect(fx, fy + ts * 0.15, ts, 2 * zoom);
+      ctx.fillRect(fx, fy + ts * 0.45, ts, 2 * zoom);
+    }
+
+    // Label
+    const labelX = GARDEN.x + GARDEN.w / 2;
+    const labelY = GARDEN.y + GARDEN.h - 0.5;
+    const { x: lx, y: ly } = this.worldToScreen(state, labelX * TILE_SIZE, labelY * TILE_SIZE);
+    ctx.fillStyle = "rgba(255,255,255,0.12)";
+    ctx.font = `${Math.max(5, 5 * zoom)}px "Press Start 2P", monospace`;
+    ctx.textAlign = "center";
+    ctx.fillText("GARDEN", lx, ly);
+    ctx.textAlign = "start";
+  }
+
+  private renderDog(
+    ctx: CanvasRenderingContext2D,
+    state: GameState,
+    petFrame: number
+  ): void {
+    const z = state.camera.zoom;
+    const { x: dx, y: dy } = this.worldToScreen(
+      state,
+      DOG_POSITION.x * TILE_SIZE,
+      DOG_POSITION.y * TILE_SIZE
+    );
+
+    const tailPhase = Math.sin(state.time * 6);
+    const isPetted = petFrame >= 0 && petFrame < 60;
+    const bob = isPetted ? Math.sin(state.time * 10) * z : 0;
+    const breathe = Math.sin(state.time * 2) * z * 0.3;
+
+    // Sombra
+    ctx.fillStyle = "rgba(0,0,0,0.1)";
+    ctx.fillRect(dx + 2 * z, dy + 13 * z, 13 * z, 2 * z);
+
+    // Rabo
+    ctx.fillStyle = COLORS.dogBody;
+    const tailAngle = tailPhase * 2 * z;
+    ctx.fillRect(dx, dy + 3 * z + tailAngle + bob, 2 * z, 4 * z);
+    ctx.fillStyle = COLORS.dogBodyDark;
+    ctx.fillRect(dx, dy + 3 * z + tailAngle + bob, z, 4 * z);
+
+    // Corpo — arredondado
+    ctx.fillStyle = COLORS.dogBody;
+    ctx.fillRect(dx + 2 * z, dy + 5 * z + bob + breathe, 11 * z, 7 * z);
+    ctx.fillRect(dx + 3 * z, dy + 4 * z + bob + breathe, 9 * z, z); // costas arredondada
+    // Barriga (mais clara)
+    ctx.fillStyle = "#d4a84a";
+    ctx.fillRect(dx + 4 * z, dy + 9 * z + bob + breathe, 7 * z, 2 * z);
+    // Sombra corporal
+    ctx.fillStyle = COLORS.dogBodyDark;
+    ctx.fillRect(dx + 2 * z, dy + 11 * z + bob + breathe, 11 * z, z);
+
+    // Cabeca — arredondada
+    ctx.fillStyle = COLORS.dogBody;
+    ctx.fillRect(dx + 11 * z, dy + 2 * z + bob, 5 * z, 7 * z);
+    ctx.fillRect(dx + 12 * z, dy + z + bob, 3 * z, z); // topo arredondado
+    // Focinho (area mais clara)
+    ctx.fillStyle = "#d4a84a";
+    ctx.fillRect(dx + 13 * z, dy + 6 * z + bob, 3 * z, 2 * z);
+
+    // Orelha — caida
+    ctx.fillStyle = COLORS.dogEar;
+    ctx.fillRect(dx + 14 * z, dy + bob, 2 * z, 4 * z);
+    ctx.fillStyle = COLORS.dogBodyDark;
+    ctx.fillRect(dx + 14 * z, dy + bob, z, 4 * z); // sombra orelha
+
+    // Olho — com brilho
+    ctx.fillStyle = "#1a1a2e";
+    ctx.fillRect(dx + 12 * z, dy + 3.5 * z + bob, 1.5 * z, 1.5 * z);
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(dx + 12 * z, dy + 3.5 * z + bob, z * 0.6, z * 0.6);
+
+    // Nariz
+    ctx.fillStyle = COLORS.dogNose;
+    ctx.fillRect(dx + 15 * z, dy + 5.5 * z + bob, z * 1.2, z);
+
+    // Lingua
+    if (isPetted) {
+      ctx.fillStyle = COLORS.dogTongue;
+      ctx.fillRect(dx + 14 * z, dy + 8 * z + bob, z, 2.5 * z);
+      ctx.fillStyle = "#c0392b";
+      ctx.fillRect(dx + 14 * z, dy + 10 * z + bob, z, z * 0.5);
+    }
+
+    // Patas — com detalhe
+    const patas = [3, 5, 9, 11];
+    for (const px of patas) {
+      ctx.fillStyle = COLORS.dogBodyDark;
+      ctx.fillRect(dx + px * z, dy + 12 * z + bob + breathe, 2 * z, 2 * z);
+      ctx.fillStyle = "#d4a84a";
+      ctx.fillRect(dx + px * z, dy + 13 * z + bob + breathe, 2 * z, z);
+    }
+
+    // Coleira
+    ctx.fillStyle = "#e74c3c";
+    ctx.fillRect(dx + 10 * z, dy + 8 * z + bob, z, 2 * z);
+    ctx.fillStyle = "#f1c40f";
+    ctx.fillRect(dx + 10 * z, dy + 9 * z + bob, z, z);
+
+    // Coracao flutuante quando acariciado
+    if (isPetted) {
+      const heartY = dy - 6 * z - (petFrame * 0.4 * z);
+      const heartAlpha = Math.max(0, 1 - petFrame / 60);
+      ctx.fillStyle = `rgba(233, 69, 96, ${heartAlpha})`;
+      const hx = dx + 8 * z;
+      ctx.fillRect(hx, heartY + z, 2 * z, 2 * z);
+      ctx.fillRect(hx + 3 * z, heartY + z, 2 * z, 2 * z);
+      ctx.fillRect(hx - z, heartY + 3 * z, 7 * z, 2 * z);
+      ctx.fillRect(hx, heartY + 5 * z, 5 * z, z);
+      ctx.fillRect(hx + z, heartY + 6 * z, 3 * z, z);
+      ctx.fillRect(hx + 2 * z, heartY + 7 * z, z, z);
+    }
   }
 
   private renderChatBubble(
@@ -671,38 +1025,53 @@ export class Renderer {
     // Usa colorShirt customizado, com fallback para color (sprite default)
     const shirtColor = character.colorShirt || character.color;
 
+    // Seta direction para uso no drawPixelBody
+    // Left usa o desenho de "right" espelhado horizontalmente
+    const facingLeft = character.direction === "left";
+    this.currentDirection = facingLeft ? "right" : character.direction;
+
+    if (facingLeft) {
+      ctx.save();
+      ctx.scale(-1, 1);
+    }
+    const drawX = facingLeft ? -(cx + cw) : cx;
+
     // Draw character based on state
     switch (charState) {
       case "typing":
-        this.drawTypingCharacter(ctx, cx, cy, cw, ch, zoom, shirtColor, animFrame);
+        this.drawTypingCharacter(ctx, drawX, cy, cw, ch, zoom, shirtColor, animFrame);
         break;
       case "focused":
-        this.drawFocusedCharacter(ctx, cx, cy, cw, ch, zoom, shirtColor, animFrame);
+        this.drawFocusedCharacter(ctx, drawX, cy, cw, ch, zoom, shirtColor, animFrame);
         break;
       case "drinking_coffee":
-        this.drawCoffeeCharacter(ctx, cx, cy, cw, ch, zoom, shirtColor, animFrame, state.time);
+        this.drawCoffeeCharacter(ctx, drawX, cy, cw, ch, zoom, shirtColor, animFrame, state.time);
         break;
       case "sleeping":
-        this.drawSleepingCharacter(ctx, cx, cy, cw, ch, zoom, shirtColor, animFrame, state.time);
+        this.drawSleepingCharacter(ctx, drawX, cy, cw, ch, zoom, shirtColor, animFrame, state.time);
         break;
       case "walking":
-        this.drawWalkingCharacter(ctx, cx, cy, cw, ch, zoom, shirtColor, animFrame);
+        this.drawWalkingCharacter(ctx, drawX, cy, cw, ch, zoom, shirtColor, animFrame);
         break;
       case "idle":
-        this.drawIdleCharacter(ctx, cx, cy, cw, ch, zoom, shirtColor, animFrame);
+        this.drawIdleCharacter(ctx, drawX, cy, cw, ch, zoom, shirtColor, animFrame);
         break;
       case "dancing":
-        this.drawDancingCharacter(ctx, cx, cy, cw, ch, zoom, shirtColor, animFrame, state.time);
+        this.drawDancingCharacter(ctx, drawX, cy, cw, ch, zoom, shirtColor, animFrame, state.time);
         break;
       case "walking_coffee":
-        this.drawWalkingCoffeeCharacter(ctx, cx, cy, cw, ch, zoom, shirtColor, animFrame, state.time);
+        this.drawWalkingCoffeeCharacter(ctx, drawX, cy, cw, ch, zoom, shirtColor, animFrame, state.time);
         break;
       case "waving":
-        this.drawWavingCharacter(ctx, cx, cy, cw, ch, zoom, shirtColor, animFrame, state.time);
+        this.drawWavingCharacter(ctx, drawX, cy, cw, ch, zoom, shirtColor, animFrame, state.time);
         break;
       case "sitting_floor":
-        this.drawSittingFloorCharacter(ctx, cx, cy, cw, ch, zoom, shirtColor, animFrame);
+        this.drawSittingFloorCharacter(ctx, drawX, cy, cw, ch, zoom, shirtColor, animFrame);
         break;
+    }
+
+    if (facingLeft) {
+      ctx.restore();
     }
 
     // Calcula posicao real da cabeca por estado (para acessorios)
@@ -723,13 +1092,28 @@ export class Renderer {
       accHeadY = cy + bounce;
     }
 
-    // Accessories — draw on top of character
+    // Accessories
+    const showFace = character.direction !== "up";
     if (character.hat && character.hat !== "none" && charState !== "sleeping") {
-      this.drawHat(ctx, accHeadX, accHeadY, headSize, zoom, character.hat);
+      if (facingLeft) {
+        ctx.save();
+        ctx.scale(-1, 1);
+        this.drawHat(ctx, -(accHeadX + headSize), accHeadY, headSize, zoom, character.hat);
+        ctx.restore();
+      } else {
+        this.drawHat(ctx, accHeadX, accHeadY, headSize, zoom, character.hat);
+      }
     }
 
-    if (character.glasses && character.glasses !== "none" && charState !== "sleeping") {
-      this.drawGlasses(ctx, accHeadX, accHeadY, headSize, zoom, character.glasses);
+    if (showFace && character.glasses && character.glasses !== "none" && charState !== "sleeping") {
+      if (facingLeft) {
+        ctx.save();
+        ctx.scale(-1, 1);
+        this.drawGlasses(ctx, -(accHeadX + headSize), accHeadY, headSize, zoom, character.glasses);
+        ctx.restore();
+      } else {
+        this.drawGlasses(ctx, accHeadX, accHeadY, headSize, zoom, character.glasses);
+      }
     }
 
     // Name label
@@ -1129,35 +1513,120 @@ export class Renderer {
     zoom: number,
     shirtColor: string
   ): void {
-    // Head
-    ctx.fillStyle = this.skinColor;
-    const headSize = w * 0.6;
+    const z = zoom;
+    const headSize = w * 0.65;
     const headX = x + (w - headSize) / 2;
-    ctx.fillRect(headX, y, headSize, headSize);
+    const dir = this.currentDirection;
+    const isSide = dir === "left" || dir === "right";
+    const isBack = dir === "up";
+
+    // Sombra no chao
+    ctx.fillStyle = "rgba(0,0,0,0.12)";
+    ctx.fillRect(x + z, y + h - z, w - 2 * z, 2 * z);
+
+    // Head — formato arredondado
+    ctx.fillStyle = this.skinColor;
+    ctx.fillRect(headX + z, y, headSize - 2 * z, headSize);
+    ctx.fillRect(headX, y + z, headSize, headSize - 2 * z);
+
+    // Sombra lateral da cabeca
+    ctx.fillStyle = COLORS.skinShadow;
+    if (isSide) {
+      ctx.fillRect(headX + headSize - 2 * z, y + 2 * z, z, headSize - 4 * z);
+    } else {
+      ctx.fillRect(headX + headSize - 2 * z, y + 2 * z, z * 0.7, headSize - 4 * z);
+    }
 
     // Hair
-    this.drawHairStyle(ctx, headX, y, headSize, zoom);
+    this.drawHairStyle(ctx, headX, y, headSize, z);
 
-    // Eyes
-    ctx.fillStyle = "#000000";
-    ctx.fillRect(headX + 2 * zoom, y + 4 * zoom, 1.5 * zoom, 1.5 * zoom);
-    ctx.fillRect(
-      headX + headSize - 3.5 * zoom,
-      y + 4 * zoom,
-      1.5 * zoom,
-      1.5 * zoom
-    );
+    if (isBack) {
+      // COSTAS — sem rosto, cabelo cobre mais
+      ctx.fillStyle = this.hairColor;
+      ctx.fillRect(headX + z, y + headSize * 0.3, headSize - 2 * z, headSize * 0.5);
+    } else if (isSide) {
+      // LADO — 1 olho visivel, nariz, orelha
+      const eyeY = y + headSize * 0.42;
+      // Olho (apenas 1, do lado da frente)
+      ctx.fillStyle = "#1a1a2e";
+      ctx.fillRect(headX + headSize - 4 * z, eyeY, 2 * z, 2 * z);
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(headX + headSize - 4 * z, eyeY, z * 0.7, z * 0.7);
+      // Nariz (protuberancia lateral)
+      ctx.fillStyle = COLORS.skinShadow;
+      ctx.fillRect(headX + headSize - z, y + headSize * 0.5, z, z);
+      // Boquinha
+      ctx.fillStyle = COLORS.skinShadow;
+      ctx.fillRect(headX + headSize - 3 * z, y + headSize * 0.7, z * 1.2, z * 0.5);
+      // Orelha (lado de tras)
+      ctx.fillStyle = this.skinColor;
+      ctx.fillRect(headX - z * 0.5, y + headSize * 0.35, z, 2 * z);
+      ctx.fillStyle = COLORS.skinShadow;
+      ctx.fillRect(headX - z * 0.5, y + headSize * 0.35, z * 0.5, 2 * z);
+    } else {
+      // FRENTE (down) — 2 olhos, boca
+      const eyeY = y + headSize * 0.42;
+      ctx.fillStyle = "#1a1a2e";
+      ctx.fillRect(headX + 2.5 * z, eyeY, 2 * z, 2 * z);
+      ctx.fillRect(headX + headSize - 4.5 * z, eyeY, 2 * z, 2 * z);
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(headX + 2.5 * z, eyeY, z * 0.7, z * 0.7);
+      ctx.fillRect(headX + headSize - 4.5 * z, eyeY, z * 0.7, z * 0.7);
+      // Boquinha
+      ctx.fillStyle = COLORS.skinShadow;
+      ctx.fillRect(headX + headSize / 2 - z * 0.5, y + headSize * 0.7, z * 1.5, z * 0.5);
+    }
 
-    // Body / shirt
-    const bodyY = y + headSize + 1 * zoom;
-    const bodyH = h * 0.35;
+    // Pescoco
+    ctx.fillStyle = this.skinColor;
+    const neckW = w * 0.2;
+    ctx.fillRect(x + (w - neckW) / 2, y + headSize - z * 0.5, neckW, 2 * z);
+
+    // Corpo / camisa
+    const bodyY = y + headSize + z;
+    const bodyH = h * 0.32;
+    const bodyW = w - 2 * z;
     ctx.fillStyle = shirtColor;
-    ctx.fillRect(x + 1 * zoom, bodyY, w - 2 * zoom, bodyH);
+    ctx.fillRect(x + z, bodyY, bodyW, bodyH);
 
-    // Pants
+    if (isBack) {
+      // Costas — linha da coluna
+      ctx.fillStyle = this.darkenColor(shirtColor, 15);
+      ctx.fillRect(x + w / 2 - z * 0.5, bodyY + z, z, bodyH - 2 * z);
+    } else if (isSide) {
+      // Lado — corpo mais estreito visualmente, sombra forte
+      ctx.fillStyle = this.darkenColor(shirtColor, 30);
+      ctx.fillRect(x + bodyW, bodyY + z, z, bodyH - 2 * z);
+    } else {
+      // Frente — gola
+      ctx.fillStyle = this.darkenColor(shirtColor, 20);
+      ctx.fillRect(x + w / 2 - z, bodyY, 2 * z, 3 * z);
+      ctx.fillStyle = this.darkenColor(shirtColor, 30);
+      ctx.fillRect(x + bodyW, bodyY + z, z, bodyH - 2 * z);
+    }
+
+    // Calca — com divisao de pernas
     ctx.fillStyle = COLORS.pants;
     const pantsY = bodyY + bodyH;
-    ctx.fillRect(x + 1 * zoom, pantsY, w - 2 * zoom, h * 0.2);
+    const pantsH = h * 0.22;
+    const legW = (bodyW - z) / 2;
+    ctx.fillRect(x + z, pantsY, legW, pantsH);
+    ctx.fillRect(x + z + legW + z, pantsY, legW, pantsH);
+    ctx.fillStyle = "rgba(0,0,0,0.1)";
+    ctx.fillRect(x + z, pantsY + pantsH - z, bodyW, z);
+
+    // Sapatos
+    ctx.fillStyle = "#222";
+    ctx.fillRect(x + z * 0.5, pantsY + pantsH, legW + z * 0.5, z * 1.2);
+    ctx.fillRect(x + z + legW + z * 0.5, pantsY + pantsH, legW + z * 0.5, z * 1.2);
+  }
+
+  private darkenColor(hex: string, amount: number): string {
+    const num = parseInt(hex.replace("#", ""), 16);
+    const r = Math.max(0, (num >> 16) - amount);
+    const g = Math.max(0, ((num >> 8) & 0xff) - amount);
+    const b = Math.max(0, (num & 0xff) - amount);
+    return `rgb(${r},${g},${b})`;
   }
 
   private drawTypingCharacter(

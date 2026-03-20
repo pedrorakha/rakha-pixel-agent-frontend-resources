@@ -19,6 +19,8 @@ import {
   ChatMessagePayload,
   PlayerReactionPayload,
   PlayerVisualPayload,
+  DoorStatusPayload,
+  PlayerInteractPayload,
 } from "@/hooks/use-multiplayer-sync";
 import { Renderer, updateCharacterAnimations } from "@/engine/renderer";
 import { Tilemap } from "@/engine/tilemap";
@@ -36,6 +38,9 @@ import {
   BED_AREA,
   ROOM_FURNITURE,
   ROOMS,
+  MEETING_ROOM_INDEX,
+  ROOM_DOORS,
+  DOG_INTERACT_TILES,
 } from "@/lib/constants";
 
 interface ApiMember {
@@ -88,8 +93,78 @@ const API_DIRECTION_MAP: Record<string, "up" | "down" | "left" | "right"> = {
 };
 
 // Constantes do pulo
-const JUMP_VELOCITY = 18; // pixels de altura maxima
-const JUMP_GRAVITY = 80;  // gravidade (pixels/s^2)
+const JUMP_VELOCITY = 18;
+const JUMP_GRAVITY = 80;
+
+// Sons de interacao via Web Audio
+function playPokeSound() {
+  try {
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(800, ctx.currentTime);
+    osc.frequency.setValueAtTime(1200, ctx.currentTime + 0.05);
+    osc.frequency.setValueAtTime(600, ctx.currentTime + 0.1);
+    gain.gain.setValueAtTime(0.12, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.15);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.15);
+    setTimeout(() => ctx.close(), 200);
+  } catch { /* ignore */ }
+}
+
+function playHugSound() {
+  try {
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(440, ctx.currentTime);
+    osc.frequency.setValueAtTime(550, ctx.currentTime + 0.1);
+    osc.frequency.setValueAtTime(660, ctx.currentTime + 0.2);
+    gain.gain.setValueAtTime(0.1, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.3);
+    setTimeout(() => ctx.close(), 400);
+  } catch { /* ignore */ }
+}
+
+function playHighFiveSound() {
+  try {
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = "square";
+    osc.frequency.setValueAtTime(600, ctx.currentTime);
+    osc.frequency.setValueAtTime(900, ctx.currentTime + 0.04);
+    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.08);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.08);
+    setTimeout(() => ctx.close(), 150);
+  } catch { /* ignore */ }
+}
+
+const INTERACT_ACTIONS = [
+  { id: "poke", label: "👆 POKE", emoji: "👆" },
+  { id: "hug", label: "🤗 HUG", emoji: "🤗" },
+  { id: "high_five", label: "🖐️ HIGH FIVE", emoji: "🖐️" },
+  { id: "wave_at", label: "👋 WAVE", emoji: "👋" },
+] as const;
+
+const INTERACT_SOUNDS: Record<string, () => void> = {
+  poke: playPokeSound,
+  hug: playHugSound,
+  high_five: playHighFiveSound,
+};
 
 export function OfficeCanvas() {
   const { canvasRef, ctx, size } = useCanvas();
@@ -127,6 +202,9 @@ export function OfficeCanvas() {
   const [chatFocused, setChatFocused] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [charMenu, setCharMenu] = useState<{ screenX: number; screenY: number } | null>(null);
+  const [interactMenu, setInteractMenu] = useState<{ screenX: number; screenY: number; targetId: string; targetName: string } | null>(null);
+  const [lockedDoors, setLockedDoors] = useState<Set<number>>(new Set());
+  const dogPetFrameRef = useRef(-1);
 
   const chatInputRef = useRef<HTMLInputElement>(null);
   const historyEndRef = useRef<HTMLDivElement>(null);
@@ -147,6 +225,9 @@ export function OfficeCanvas() {
 
   const chatFocusedRef = useRef(chatFocused);
   chatFocusedRef.current = chatFocused;
+
+  const lockedDoorsRef = useRef(lockedDoors);
+  lockedDoorsRef.current = lockedDoors;
 
   const refetchDataRef = useRef<() => void>(() => {});
 
@@ -319,7 +400,27 @@ export function OfficeCanvas() {
     }
   }, []);
 
-  const { emitMove, emitJump, emitChat, emitReaction, emitVisual, onlinePlayers } = useMultiplayerSync({
+  const handleDoorStatus = useCallback((payload: DoorStatusPayload) => {
+    setLockedDoors(new Set(payload.lockedRooms));
+  }, []);
+
+  const handleInteract = useCallback((payload: PlayerInteractPayload) => {
+    const action = INTERACT_ACTIONS.find((a) => a.id === payload.action);
+    if (!action) return;
+
+    // Toca som
+    INTERACT_SOUNDS[payload.action]?.();
+
+    // Mostra emoji flutuante no personagem alvo
+    addReaction(payload.toId, action.emoji, payload.timestamp);
+
+    // Se eu fui o alvo, mostra tambem no remetente
+    if (payload.toId === selectedMemberIdRef.current) {
+      addReaction(payload.fromId, action.emoji, payload.timestamp);
+    }
+  }, [addReaction]);
+
+  const { emitMove, emitJump, emitChat, emitReaction, emitVisual, emitDoorToggle, emitInteract, onlinePlayers } = useMultiplayerSync({
     playerId: selectedMemberId,
     getPlayerPosition,
     onRemoteMove: handleRemoteMove,
@@ -329,6 +430,8 @@ export function OfficeCanvas() {
     onReaction: handleReaction,
     onVisualUpdate: handleVisualUpdate,
     onRemoteJoin: handleRemoteJoin,
+    onDoorStatus: handleDoorStatus,
+    onInteract: handleInteract,
   });
 
   // Registra emitVisual no store para uso externo (VisualEditor)
@@ -340,6 +443,21 @@ export function OfficeCanvas() {
   // Voice chat — so conecta quando 2+ jogadores no mesmo quarto
   const currentPlayerChar = characters.find((c) => c.id === selectedMemberId);
   const myRoom = currentPlayerChar ? detectRoom(currentPlayerChar.gridX, currentPlayerChar.gridY) : -1;
+  // Detecta se jogador esta perto de alguma porta (dentro de qualquer room)
+  const nearDoorRoomIndex = currentPlayerChar
+    ? ROOM_DOORS.findIndex((door) =>
+        door.insideTrigger.some(
+          (t) => t.x === currentPlayerChar.gridX && t.y === currentPlayerChar.gridY
+        )
+      )
+    : -1;
+  const isNearAnyDoor = nearDoorRoomIndex >= 0;
+  const isNearRoomLocked = isNearAnyDoor && lockedDoors.has(nearDoorRoomIndex);
+  const isNearDog = currentPlayerChar
+    ? DOG_INTERACT_TILES.some(
+        (t) => t.x === currentPlayerChar.gridX && t.y === currentPlayerChar.gridY
+      )
+    : false;
   const playersInSameRoom = myRoom >= 0
     ? characters.filter((c) => {
         if (c.id === selectedMemberId) return true; // eu
@@ -352,10 +470,12 @@ export function OfficeCanvas() {
     isInCall,
     isJoining: voiceJoining,
     isMuted,
+    isSoundOff,
     participantCount,
     participants: voiceParticipants,
     roomLabel: voiceRoomLabel,
     toggleMute,
+    toggleSound,
     toggleMuteParticipant,
   } = useVoiceChat({
     playerName: selectedMemberName,
@@ -429,6 +549,7 @@ export function OfficeCanvas() {
     desks: storeDesks,
     characters,
     onMove: handlePlayerMove,
+    lockedDoors,
   });
 
   // --- Space bar jump + Enter chat ---
@@ -445,11 +566,31 @@ export function OfficeCanvas() {
         const char = charactersRef.current.find(
           (c) => c.id === selectedMemberIdRef.current
         );
-        if (!char || char.jumpOffset > 0) return; // Ja esta pulando
+        if (!char) return;
 
+        // Verifica se esta adjacente a alguma porta (dentro de qualquer room)
+        const doorRoomIdx = ROOM_DOORS.findIndex((door) =>
+          door.insideTrigger.some(
+            (t) => t.x === char.gridX && t.y === char.gridY
+          )
+        );
+        if (doorRoomIdx >= 0) {
+          emitDoorToggle(doorRoomIdx);
+          return;
+        }
+
+        // Verifica se esta adjacente ao cachorro
+        const isNearDog = DOG_INTERACT_TILES.some(
+          (t) => t.x === char.gridX && t.y === char.gridY
+        );
+        if (isNearDog && dogPetFrameRef.current < 0) {
+          dogPetFrameRef.current = 0;
+          return;
+        }
+
+        // Pulo normal
+        if (char.jumpOffset > 0) return;
         jumpVelocitiesRef.current.set(char.id, JUMP_VELOCITY);
-
-        // Broadcast pulo
         emitJump(char.gridX, char.gridY);
       }
 
@@ -462,7 +603,7 @@ export function OfficeCanvas() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedMemberId, emitJump]);
+  }, [selectedMemberId, emitJump, emitDoorToggle]);
 
   // --- Chat submit ---
   const handleChatSubmit = useCallback(
@@ -760,6 +901,14 @@ export function OfficeCanvas() {
       updateReactions(deltaTime);
       updateFootprints();
 
+      // Atualiza animacao do cachorro
+      if (dogPetFrameRef.current >= 0) {
+        dogPetFrameRef.current += 1;
+        if (dogPetFrameRef.current >= 60) {
+          dogPetFrameRef.current = -1;
+        }
+      }
+
       // Movimentacao do jogador (ignora se chat focado)
       if (!chatFocusedRef.current) {
         const playerChar = charactersRef.current.find(
@@ -821,6 +970,18 @@ export function OfficeCanvas() {
         mergedPresenceMap.set(discordId, p.status);
       });
 
+      // Calcula se jogador esta perto de alguma porta (dentro de qualquer room)
+      const localChar = charactersRef.current.find(
+        (c) => c.id === selectedMemberIdRef.current
+      );
+      const nearDoorRoom = localChar
+        ? ROOM_DOORS.findIndex((door) =>
+            door.insideTrigger.some(
+              (t) => t.x === localChar.gridX && t.y === localChar.gridY
+            )
+          )
+        : -1;
+
       rendererRef.current.render(
         gameState,
         storeDesks,
@@ -830,7 +991,10 @@ export function OfficeCanvas() {
         chatBubblesRef.current,
         onlinePlayersRef.current,
         reactionsRef.current,
-        footprintsRef.current
+        footprintsRef.current,
+        lockedDoorsRef.current,
+        nearDoorRoom,
+        dogPetFrameRef.current
       );
     },
     [ctx, cameraX, cameraY, zoom, size, storeDesks, presences, presenceMap]
@@ -892,13 +1056,26 @@ export function OfficeCanvas() {
             (c) => c.id === selectedMemberIdRef.current
           );
           if (playerChar) {
-            // Clicou no proprio personagem — abre menu
+            // Clicou no proprio personagem — abre menu de emotes
             if (gridX === playerChar.gridX && gridY === playerChar.gridY) {
+              setInteractMenu(null);
               setCharMenu({ screenX: e.clientX, screenY: e.clientY });
               return;
             }
-            // Clicou em outro lugar — fecha menu e move
+
+            // Clicou em outro personagem — abre menu de interacao
+            const targetChar = charactersRef.current.find(
+              (c) => c.id !== selectedMemberIdRef.current && c.gridX === gridX && c.gridY === gridY
+            );
+            if (targetChar) {
+              setCharMenu(null);
+              setInteractMenu({ screenX: e.clientX, screenY: e.clientY, targetId: targetChar.id, targetName: targetChar.name });
+              return;
+            }
+
+            // Clicou em outro lugar — fecha menus e move
             setCharMenu(null);
+            setInteractMenu(null);
             handleClickMove(gridX, gridY, playerChar);
           }
         }
@@ -1053,6 +1230,40 @@ export function OfficeCanvas() {
         );
       })()}
 
+      {/* Menu de interacao com outro jogador */}
+      {interactMenu && (
+        <>
+          <div
+            className="fixed inset-0 z-30"
+            onClick={() => setInteractMenu(null)}
+          />
+          <div
+            className="fixed z-40 bg-pixel-surface border-2 border-pixel-panel shadow-[2px_2px_0px_0px_rgba(0,0,0,0.4)]"
+            style={{
+              left: interactMenu.screenX,
+              top: interactMenu.screenY - 4,
+              transform: "translate(-50%, -100%)",
+            }}
+          >
+            <div className="px-3 py-1.5 border-b border-pixel-panel/50">
+              <span className="font-pixel text-[8px] text-pixel-muted">{interactMenu.targetName}</span>
+            </div>
+            {INTERACT_ACTIONS.map((action) => (
+              <button
+                key={action.id}
+                onClick={() => {
+                  emitInteract(interactMenu.targetId, action.id);
+                  setInteractMenu(null);
+                }}
+                className="block w-full px-3 py-2 font-pixel text-[10px] text-pixel-text hover:bg-pixel-accent/20 hover:text-pixel-accent transition-colors whitespace-nowrap text-left"
+              >
+                {action.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+
       {/* Zoom controls */}
       <div className="absolute bottom-6 right-6 flex flex-col gap-2 z-20">
         <button
@@ -1110,6 +1321,21 @@ export function OfficeCanvas() {
             </span>
           </button>
         )}
+        {/* Sound toggle — visivel sempre que esta num quarto */}
+        {!isSpectator && selectedMemberId && myRoom >= 0 && (
+          <button
+            onClick={toggleSound}
+            className={`flex items-center gap-2 px-4 py-1.5 border-2 transition-colors ${
+              isSoundOff
+                ? "bg-red-900/50 border-red-600/50 hover:border-red-500"
+                : "bg-pixel-surface/90 border-pixel-panel hover:border-pixel-accent"
+            }`}
+          >
+            <span className="font-pixel text-[9px] text-pixel-text">
+              {isSoundOff ? "🔇 SOUND OFF" : "🔊 SOUND ON"}
+            </span>
+          </button>
+        )}
         {/* Lista de participantes na call */}
         {isInCall && voiceParticipants.length > 0 && (
           <div className="bg-pixel-surface/90 border-2 border-pixel-panel px-3 py-2 flex flex-col gap-1 max-w-[180px]">
@@ -1135,6 +1361,30 @@ export function OfficeCanvas() {
                 </span>
               </div>
             ))}
+          </div>
+        )}
+        {/* Door lock hint (qualquer room) */}
+        {isNearAnyDoor && (
+          <div className={`flex items-center gap-2 px-4 py-1.5 border-2 ${
+            isNearRoomLocked
+              ? "bg-red-900/50 border-red-600/50"
+              : "bg-pixel-surface/90 border-pixel-panel"
+          }`}>
+            <span className="font-pixel text-[9px] text-pixel-text">
+              {isNearRoomLocked ? "🔒 [SPACE] UNLOCK" : "🔓 [SPACE] LOCK"}
+            </span>
+          </div>
+        )}
+        {/* Room locked indicator (visivel pra quem esta dentro de uma room trancada) */}
+        {!isNearAnyDoor && myRoom >= 0 && lockedDoors.has(myRoom) && (
+          <div className="flex items-center gap-2 bg-red-900/50 border-2 border-red-600/50 px-4 py-1.5">
+            <span className="font-pixel text-[9px] text-pixel-text">🔒 ROOM LOCKED</span>
+          </div>
+        )}
+        {/* Dog pet hint */}
+        {isNearDog && (
+          <div className="flex items-center gap-2 bg-pixel-surface/90 border-2 border-pixel-panel px-4 py-1.5">
+            <span className="font-pixel text-[9px] text-pixel-text">🐕 [SPACE] PET</span>
           </div>
         )}
       </div>

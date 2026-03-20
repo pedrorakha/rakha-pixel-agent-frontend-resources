@@ -57,6 +57,9 @@ export default function DashboardOverview() {
   const [desks, setDesks] = useState<ApiDesk[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [editingDeskId, setEditingDeskId] = useState<string | null>(null);
+  const [editingLabel, setEditingLabel] = useState("");
+  const [savingDesk, setSavingDesk] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -93,6 +96,22 @@ export default function DashboardOverview() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  const handleSaveDeskLabel = useCallback(async (deskId: string) => {
+    const trimmed = editingLabel.trim();
+    if (!trimmed) return;
+    setSavingDesk(true);
+    try {
+      await api.patch(`/office/desks/${deskId}`, { label: trimmed });
+      setDesks((prev) => prev.map((d) => d.id === deskId ? { ...d, label: trimmed } : d));
+      setMembers((prev) => prev.map((m) => m.deskId === deskId ? { ...m, deskLabel: trimmed } : m));
+      setEditingDeskId(null);
+    } catch {
+      // Ignora erro silenciosamente
+    } finally {
+      setSavingDesk(false);
+    }
+  }, [editingLabel]);
 
   const onlineCount = members.filter((m) => m.status === "online").length;
   const dndCount = members.filter((m) => m.status === "dnd").length;
@@ -160,6 +179,81 @@ export default function DashboardOverview() {
           icon="[C]"
         />
       </div>
+
+      {/* Room management */}
+      <section className="bg-pixel-surface border-4 border-pixel-panel p-5 mb-6 sm:mb-8">
+        <h2 className="font-pixel text-[13px] text-pixel-text mb-4">ROOMS</h2>
+        <div className="flex flex-col gap-2">
+          {desks.length === 0 && (
+            <p className="font-pixel text-[11px] text-pixel-muted py-4 text-center">
+              No rooms configured yet.
+            </p>
+          )}
+          {desks.map((desk) => {
+            const assignedMember = members.find((m) => m.deskId === desk.id);
+            const isEditing = editingDeskId === desk.id;
+            return (
+              <div
+                key={desk.id}
+                className="flex items-center justify-between bg-pixel-bg/50 border-2 border-pixel-panel/50 px-4 py-3"
+              >
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <span className="font-pixel text-[11px] text-pixel-accent shrink-0">[R]</span>
+                  {isEditing ? (
+                    <form
+                      onSubmit={(e) => { e.preventDefault(); handleSaveDeskLabel(desk.id); }}
+                      className="flex items-center gap-2 flex-1"
+                    >
+                      <input
+                        type="text"
+                        value={editingLabel}
+                        onChange={(e) => setEditingLabel(e.target.value)}
+                        className="font-pixel text-[11px] text-pixel-text bg-pixel-bg border-2 border-pixel-accent px-2 py-1 w-full max-w-[180px] outline-none"
+                        autoFocus
+                        disabled={savingDesk}
+                      />
+                      <Button size="sm" variant="primary" type="submit" disabled={savingDesk || !editingLabel.trim()}>
+                        OK
+                      </Button>
+                      <Button size="sm" variant="ghost" type="button" onClick={() => setEditingDeskId(null)} disabled={savingDesk}>
+                        X
+                      </Button>
+                    </form>
+                  ) : (
+                    <div className="flex-1 min-w-0">
+                      <span className="font-pixel text-[11px] text-pixel-text block truncate">
+                        {desk.label}
+                      </span>
+                      {assignedMember ? (
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <div
+                            className="w-3 h-3 border border-white/20 shrink-0"
+                            style={{ backgroundColor: assignedMember.color }}
+                          />
+                          <span className="font-pixel text-[9px] text-pixel-muted truncate">
+                            {assignedMember.name}
+                          </span>
+                          <Badge status={assignedMember.status} size="sm" showLabel={false} />
+                        </div>
+                      ) : (
+                        <span className="font-pixel text-[9px] text-pixel-muted">Empty</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+                {!isEditing && (
+                  <button
+                    onClick={() => { setEditingDeskId(desk.id); setEditingLabel(desk.label); }}
+                    className="font-pixel text-[9px] text-pixel-muted hover:text-pixel-accent transition-colors border-2 border-pixel-panel hover:border-pixel-accent px-2 py-1 shrink-0"
+                  >
+                    RENAME
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </section>
 
       {/* Recent activity */}
       <section className="bg-pixel-surface border-4 border-pixel-panel p-5">

@@ -10,6 +10,8 @@ const TILE_DEFS: Record<number, TileData> = {
   5: { type: "floor_alt", walkable: true, color: COLORS.floorHallAlt ?? "#3e3e68" },
   6: { type: "floor", walkable: true, color: COLORS.floorRoom ?? "#2a2a50" },
   7: { type: "floor_alt", walkable: true, color: COLORS.floorRoomAlt ?? "#303058" },
+  8: { type: "floor", walkable: true, color: COLORS.grass ?? "#1a4a1a" },
+  9: { type: "floor_alt", walkable: true, color: COLORS.grassAlt ?? "#1e5520" },
 };
 
 export class Tilemap {

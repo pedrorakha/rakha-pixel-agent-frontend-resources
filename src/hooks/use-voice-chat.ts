@@ -65,12 +65,20 @@ interface UseVoiceChatOptions {
   playersInSameRoom: number;
 }
 
+function loadPersistedBool(key: string, fallback: boolean): boolean {
+  if (typeof window === "undefined") return fallback;
+  const v = localStorage.getItem(key);
+  return v === null ? fallback : v === "true";
+}
+
 export function useVoiceChat({ playerName, gridX, gridY, enabled, playersInSameRoom }: UseVoiceChatOptions) {
   const callRef = useRef<DailyCall | null>(null);
   const audioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
   const [currentRoom, setCurrentRoom] = useState(-1);
-  const [isMuted, setIsMuted] = useState(false);
-  const isMutedRef = useRef(false);
+  const [isMuted, setIsMuted] = useState(() => loadPersistedBool("pxa:mic-muted", false));
+  const isMutedRef = useRef(loadPersistedBool("pxa:mic-muted", false));
+  const [isSoundOff, setIsSoundOff] = useState(() => loadPersistedBool("pxa:sound-off", false));
+  const isSoundOffRef = useRef(loadPersistedBool("pxa:sound-off", false));
   const [isInCall, setIsInCall] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
   const [participants, setParticipants] = useState<VoiceParticipant[]>([]);
@@ -113,8 +121,8 @@ export function useVoiceChat({ playerName, gridX, gridY, enabled, playersInSameR
       }
       const stream = new MediaStream([audioTrack.persistentTrack]);
       el.srcObject = stream;
-      // Aplica mute local se estava mutado
-      el.volume = mutedByMeRef.current.has(sessionId) ? 0 : 1;
+      // Aplica mute local se estava mutado ou sound off
+      el.volume = (isSoundOffRef.current || mutedByMeRef.current.has(sessionId)) ? 0 : 1;
       el.play().catch(() => {});
     }
   }, []);
@@ -238,10 +246,35 @@ export function useVoiceChat({ playerName, gridX, gridY, enabled, playersInSameR
     const newMuted = !isMuted;
     isMutedRef.current = newMuted;
     setIsMuted(newMuted);
+    localStorage.setItem("pxa:mic-muted", String(newMuted));
     if (callRef.current) {
       callRef.current.setLocalAudio(!newMuted);
     }
   }, [isMuted]);
+
+  // Aplica volume em todos os audio elements remotos
+  const applyVolumeToAll = useCallback((soundOff: boolean) => {
+    audioElementsRef.current.forEach((el, sid) => {
+      el.volume = (soundOff || mutedByMeRef.current.has(sid)) ? 0 : 1;
+    });
+  }, []);
+
+  const toggleSound = useCallback(() => {
+    const newSoundOff = !isSoundOff;
+    isSoundOffRef.current = newSoundOff;
+    setIsSoundOff(newSoundOff);
+    localStorage.setItem("pxa:sound-off", String(newSoundOff));
+    applyVolumeToAll(newSoundOff);
+    // Mutar som também muta o mic
+    if (newSoundOff && !isMuted) {
+      isMutedRef.current = true;
+      setIsMuted(true);
+      localStorage.setItem("pxa:mic-muted", "true");
+      if (callRef.current) {
+        callRef.current.setLocalAudio(false);
+      }
+    }
+  }, [isSoundOff, isMuted, applyVolumeToAll]);
 
   // Mutar/desmutar um participante remoto localmente
   const toggleMuteParticipant = useCallback((sessionId: string) => {
@@ -251,10 +284,10 @@ export function useVoiceChat({ playerName, gridX, gridY, enabled, playersInSameR
     } else {
       mutedByMeRef.current.add(sessionId);
     }
-    // Ajusta volume do audio element
+    // Ajusta volume do audio element (respeita sound off global)
     const el = audioElementsRef.current.get(sessionId);
     if (el) {
-      el.volume = wasMuted ? 1 : 0;
+      el.volume = (isSoundOffRef.current || !wasMuted) ? 0 : 1;
     }
     updateParticipants();
   }, [updateParticipants]);
@@ -286,11 +319,13 @@ export function useVoiceChat({ playerName, gridX, gridY, enabled, playersInSameR
     isInCall,
     isJoining,
     isMuted,
+    isSoundOff,
     currentRoom,
     detectedRoom,
     participantCount: participants.length,
     participants,
     toggleMute,
+    toggleSound,
     toggleMuteParticipant,
     leaveCall,
     roomLabel: currentRoom >= 0 ? ROOMS[currentRoom].label : null,

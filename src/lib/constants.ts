@@ -2,7 +2,7 @@ import { CharacterState } from "@/types/character";
 import { DiscordStatus } from "@/types/discord";
 
 export const TILE_SIZE = 16;
-export const GRID_WIDTH = 59;
+export const GRID_WIDTH = 53;
 export const GRID_HEIGHT = 36;
 export const DEFAULT_ZOOM = 2;
 export const MIN_ZOOM = 1;
@@ -30,6 +30,24 @@ export const COLORS = {
   wallDark: "#2c2c54",
   wallTop: "#5c5ca0",
   wallDivider: "#3d3d70",
+  // Garden
+  grass: "#1a4a1a",
+  grassAlt: "#1e5520",
+  grassLight: "#2d6b2d",
+  flowerRed: "#e74c3c",
+  flowerYellow: "#f1c40f",
+  flowerBlue: "#5dade2",
+  flowerPink: "#ff69b4",
+  treeTrunk: "#5c3d2e",
+  treeLeaf: "#228b22",
+  treeLeafDark: "#1a6b1a",
+  fence: "#8b7355",
+  // Dog
+  dogBody: "#c4913b",
+  dogBodyDark: "#a07830",
+  dogEar: "#8b6914",
+  dogNose: "#333333",
+  dogTongue: "#e74c3c",
   // Desk
   desk: "#8b6914",
   deskDark: "#6b4f10",
@@ -79,6 +97,9 @@ export const COLORS = {
   // Door
   door: "#8b6914",
   doorFrame: "#6b4f10",
+  doorLocked: "#8b2020",
+  doorLockedFrame: "#5c1515",
+  doorHighlight: "#4fc3f7",
 } as const;
 
 export const STATUS_COLORS: Record<DiscordStatus, string> = {
@@ -109,13 +130,14 @@ export const ANIMATION_SPEEDS: Record<CharacterState, number> = {
 };
 
 // ============================================================
-// OFFICE LAYOUT — 52 x 36 grid — 9 ROOMS (3x3) + Meeting Room
+// OFFICE LAYOUT — 53 x 36 grid
 //
-// Columns 0-36: 9 personal rooms (3x3 grid)
-// Columns 37-38: hallway connecting to meeting room
-// Columns 39-51: meeting room (wall + 11 interior + wall)
+// Left side (3x3 grid): 9 personal rooms
+// Right side top: Meeting Room (2 lockable doors: left + bottom)
+// Right side middle: Café (communal area)
+// Right side bottom: Garden (open area, no walls)
 //
-// Tile IDs: 0=empty, 1=wall, 4=hall A, 5=hall B, 6=room A, 7=room B
+// Tile IDs: 0=empty, 1=wall, 4/5=hall, 6/7=room, 8/9=grass
 // ============================================================
 
 interface RoomDef {
@@ -126,7 +148,7 @@ interface RoomDef {
   label: string;
 }
 
-// 9 personal rooms (3x3) + 1 meeting room
+// 9 personal rooms (3x3) + meeting room + café
 export const ROOMS: RoomDef[] = [
   // Row 1 (top)
   { x: 2,  y: 2,  w: 9, h: 8, label: "Room 1" },
@@ -140,11 +162,91 @@ export const ROOMS: RoomDef[] = [
   { x: 2,  y: 26, w: 9, h: 8, label: "Room 7" },
   { x: 14, y: 26, w: 9, h: 8, label: "Room 8" },
   { x: 26, y: 26, w: 9, h: 8, label: "Room 9" },
-  // Meeting room (right side, full height, wider)
-  { x: 39, y: 3, w: 19, h: 30, label: "Meeting Room" },
+  // Meeting room (right side, aligned with row 1)
+  { x: 38, y: 2, w: 13, h: 8, label: "Meeting Room" },
+  // Café (right side, aligned with row 2)
+  { x: 38, y: 14, w: 13, h: 8, label: "Café" },
 ];
 
 export const MEETING_ROOM_INDEX = 9;
+export const CAFE_ROOM_INDEX = 10;
+
+// Gera tiles de porta e triggers internos para qualquer room
+interface RoomDoorDef {
+  tiles: { x: number; y: number }[];
+  insideTrigger: { x: number; y: number }[];
+}
+
+function buildRoomDoors(room: RoomDef): RoomDoorDef {
+  const doorX = room.x + Math.floor(room.w / 2);
+  const tiles: { x: number; y: number }[] = [];
+  const insideTrigger: { x: number; y: number }[] = [];
+
+  // Porta inferior (bottom wall)
+  tiles.push(
+    { x: doorX - 1, y: room.y + room.h },
+    { x: doorX, y: room.y + room.h },
+    { x: doorX + 1, y: room.y + room.h },
+  );
+  insideTrigger.push(
+    { x: doorX - 1, y: room.y + room.h - 1 },
+    { x: doorX, y: room.y + room.h - 1 },
+    { x: doorX + 1, y: room.y + room.h - 1 },
+  );
+
+  // Porta superior (top wall)
+  tiles.push(
+    { x: doorX - 1, y: room.y - 1 },
+    { x: doorX, y: room.y - 1 },
+    { x: doorX + 1, y: room.y - 1 },
+  );
+  insideTrigger.push(
+    { x: doorX - 1, y: room.y },
+    { x: doorX, y: room.y },
+    { x: doorX + 1, y: room.y },
+  );
+
+  // Meeting room + Café: porta esquerda extra
+  if (room.label === "Meeting Room" || room.label === "Café") {
+    const doorY = room.y + Math.floor(room.h / 2);
+    tiles.push(
+      { x: room.x - 1, y: doorY - 1 },
+      { x: room.x - 1, y: doorY },
+      { x: room.x - 1, y: doorY + 1 },
+    );
+    insideTrigger.push(
+      { x: room.x, y: doorY - 1 },
+      { x: room.x, y: doorY },
+      { x: room.x, y: doorY + 1 },
+    );
+  }
+
+  return { tiles, insideTrigger };
+}
+
+// Portas de todas as rooms (todas trancáveis)
+export const ROOM_DOORS: RoomDoorDef[] = ROOMS.map(buildRoomDoors);
+
+// Atalho legado (meeting room = index 9)
+export const MEETING_DOOR = ROOM_DOORS[MEETING_ROOM_INDEX];
+
+// Jardim (area aberta sem paredes, abaixo do café)
+export const GARDEN = {
+  x: 38,
+  y: 24,
+  w: 13,
+  h: 10,
+};
+
+// Cachorrinho interativo no jardim
+export const DOG_POSITION = { x: 44, y: 28 };
+// Tiles adjacentes ao cachorro onde o jogador pode interagir
+export const DOG_INTERACT_TILES = [
+  { x: 43, y: 28 },
+  { x: 45, y: 28 },
+  { x: 44, y: 27 },
+  { x: 44, y: 29 },
+];
 
 const W = GRID_WIDTH;
 const H = GRID_HEIGHT;
@@ -204,8 +306,8 @@ export const OFFICE_LAYOUT: number[][] = (() => {
     set(doorX, ry - 1, (doorX + ry - 1) % 2 === 0 ? 4 : 5);
     set(doorX + 1, ry - 1, (doorX + 1 + ry - 1) % 2 === 0 ? 4 : 5);
 
-    // Meeting room: porta na parede esquerda (3 tiles, centro vertical)
-    if (room.label === "Meeting Room") {
+    // Meeting room + Café: porta na parede esquerda (3 tiles, centro vertical)
+    if (room.label === "Meeting Room" || room.label === "Café") {
       const doorY = ry + Math.floor(rh / 2);
       set(rx - 1, doorY - 1, (rx - 1 + doorY - 1) % 2 === 0 ? 4 : 5);
       set(rx - 1, doorY, (rx - 1 + doorY) % 2 === 0 ? 4 : 5);
@@ -213,11 +315,25 @@ export const OFFICE_LAYOUT: number[][] = (() => {
     }
   }
 
+  // Garden area — grama sem paredes (substitui hallway tiles)
+  for (let y = GARDEN.y; y < GARDEN.y + GARDEN.h && y < H - 1; y++) {
+    for (let x = GARDEN.x; x < GARDEN.x + GARDEN.w && x < W - 1; x++) {
+      set(x, y, (x + y) % 2 === 0 ? 8 : 9);
+    }
+  }
+  // Remove paredes na divisa entre hallway e jardim (lado esquerdo do jardim)
+  for (let y = GARDEN.y; y < GARDEN.y + GARDEN.h && y < H - 1; y++) {
+    const leftWall = GARDEN.x - 1;
+    if (leftWall > 0) {
+      const tile = layout[y]?.[leftWall];
+      if (tile === 1) set(leftWall, y, (leftWall + y) % 2 === 0 ? 4 : 5);
+    }
+  }
+
   return layout;
 })();
 
 // Desk position per room — left side of room, facing south
-// Desk is 3x2, placed at (room.x + 1, room.y + 1) so character sits at room.y + 3
 export const DEFAULT_DESKS = ROOMS.slice(0, 9).map((room, i) => ({
   id: `desk-${i + 1}`,
   gridX: room.x + 3,
@@ -239,25 +355,80 @@ export interface RoomFurniture {
   lamp: { x: number; y: number };
 }
 
-// Moveis apenas para as 9 rooms pessoais (nao inclui meeting room)
+// Moveis apenas para as 9 rooms pessoais (nao inclui meeting room nem café)
 export const ROOM_FURNITURE: RoomFurniture[] = ROOMS.slice(0, 9).map((room, i) => ({
   roomIndex: i,
-  // Desk: offset +3 right, +2 down from room origin (matches DB: room.x+3, room.y+2)
   desk: { x: room.x + 3, y: room.y + 2 },
-  // Bed: right side, bottom area (3x2)
   bed: { x: room.x + room.w - 4, y: room.y + room.h - 3 },
-  // Coffee corner: right side, top area
   coffee: { x: room.x + room.w - 3, y: room.y },
-  // Plant: top-left corner
   plant: { x: room.x, y: room.y },
-  // Rug: 3 wide x 1 tall, directly below desk (desk is at +3,+2, desk is 3x1, so rug at +3,+3 is right below)
   rug: { x: room.x + 3, y: room.y + 4, w: 3, h: 1 },
-  // Bookshelf: left wall, middle
   bookshelf: { x: room.x, y: room.y + 3 },
-  // Lamp: bottom-right corner
   lamp: { x: room.x + room.w - 1, y: room.y + room.h - 1 },
 }));
 
-// Overflow areas for unassigned characters
-export const COFFEE_AREA = { x: 12, y: 11, width: 2, height: 2 };
-export const BED_AREA = { x: 12, y: 23, width: 2, height: 2 };
+// Tiles bloqueadas estaticas (mobilia, arvores, cerca, mesa da meeting room)
+export const STATIC_BLOCKED_TILES: { x: number; y: number }[] = (() => {
+  const tiles: { x: number; y: number }[] = [];
+
+  // Mesa da meeting room (7 wide x 4 tall, centralizada) + 1 tile ao redor para cadeiras
+  const mr = ROOMS[MEETING_ROOM_INDEX];
+  const mtW = 7;
+  const mtH = 4;
+  const mtX = mr.x + Math.floor((mr.w - mtW) / 2);
+  const mtY = mr.y + Math.floor((mr.h - mtH) / 2);
+  for (let y = mtY - 1; y <= mtY + mtH; y++) {
+    for (let x = mtX; x < mtX + mtW; x++) {
+      tiles.push({ x, y });
+    }
+  }
+
+  // Mesas do café (3 wide x 2 tall cada) + balcão (2x3)
+  const cafe = ROOMS[CAFE_ROOM_INDEX];
+  const cafeTables = [
+    { x: cafe.x + 2, y: cafe.y + 1, w: 3, h: 2 },
+    { x: cafe.x + 7, y: cafe.y + 1, w: 3, h: 2 },
+  ];
+  for (const ct of cafeTables) {
+    for (let y = ct.y; y < ct.y + ct.h; y++) {
+      for (let x = ct.x; x < ct.x + ct.w; x++) {
+        tiles.push({ x, y });
+      }
+    }
+  }
+  // Balcão do café (2x3 no canto superior direito)
+  const barX = cafe.x + cafe.w - 3;
+  const barY = cafe.y;
+  for (let y = barY; y < barY + 3; y++) {
+    for (let x = barX; x < barX + 2; x++) {
+      tiles.push({ x, y });
+    }
+  }
+
+  // Cerca do jardim (toda a borda superior)
+  for (let x = GARDEN.x; x < GARDEN.x + GARDEN.w; x++) {
+    tiles.push({ x, y: GARDEN.y });
+  }
+
+  // Arvores do jardim (2x2 cada)
+  const treeBases = [
+    { x: GARDEN.x, y: GARDEN.y },
+    { x: GARDEN.x + GARDEN.w - 2, y: GARDEN.y + GARDEN.h - 3 },
+    { x: GARDEN.x + 5, y: GARDEN.y + GARDEN.h - 2 },
+  ];
+  for (const t of treeBases) {
+    tiles.push({ x: t.x, y: t.y });
+    tiles.push({ x: t.x + 1, y: t.y });
+    tiles.push({ x: t.x, y: t.y + 1 });
+    tiles.push({ x: t.x + 1, y: t.y + 1 });
+  }
+
+  // Cachorro bloqueia seu tile
+  tiles.push(DOG_POSITION);
+
+  return tiles;
+})();
+
+// Overflow areas for unassigned characters (inside café room)
+export const COFFEE_AREA = { x: 40, y: 16, width: 3, height: 2 };
+export const BED_AREA = { x: 46, y: 16, width: 3, height: 2 };
