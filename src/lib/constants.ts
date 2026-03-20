@@ -337,6 +337,35 @@ export const DOGS: DogDefinition[] = [
     },
     collarColor: "#9b59b6",
   },
+  {
+    name: "Mel",
+    position: { x: 16, y: 19 },
+    colors: {
+      body: "#f0ece4",
+      bodyDark: "#d6d0c4",
+      ear: "#8b5e3c",
+      snout: "#f5e6d0",
+      belly: "#f5efe8",
+      spots: [
+        { x: 3, y: 3, w: 4, h: 4, color: "#8b5e3c" },
+        { x: 6, y: 8, w: 3, h: 3, color: "#7a5232" },
+        { x: 2, y: 10, w: 3, h: 2, color: "#8b5e3c" },
+      ],
+    },
+    collarColor: "#f39c12",
+  },
+  {
+    name: "Chumbinho",
+    position: { x: 23, y: 19 },
+    colors: {
+      body: "#7a7068",
+      bodyDark: "#5e564f",
+      ear: "#6b5d52",
+      snout: "#8a7e74",
+      belly: "#8a7e74",
+    },
+    collarColor: "#2ecc71",
+  },
 ];
 
 // Compatibilidade — posicao do primeiro cachorro
