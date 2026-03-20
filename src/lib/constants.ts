@@ -45,10 +45,7 @@ export const COLORS = {
   // Stone path
   stone: "#6b6b80",
   stoneAlt: "#5e5e72",
-  // Dog
-  dogBody: "#c4913b",
-  dogBodyDark: "#a07830",
-  dogEar: "#8b6914",
+  // Dog (cores padrao — usadas como fallback)
   dogNose: "#333333",
   dogTongue: "#e74c3c",
   // Desk
@@ -267,15 +264,83 @@ export const CAFE = {
   h: 10,
 };
 
-// Cachorrinho interativo no jardim
-export const DOG_POSITION = { x: 20, y: 18 };
-// Tiles adjacentes ao cachorro onde o jogador pode interagir
-export const DOG_INTERACT_TILES = [
-  { x: 19, y: 18 },
-  { x: 21, y: 18 },
-  { x: 20, y: 17 },
-  { x: 20, y: 19 },
+// Paleta de cores por cachorro
+export interface DogColors {
+  body: string;
+  bodyDark: string;
+  ear: string;
+  snout: string;
+  belly: string;
+  spots?: { x: number; y: number; w: number; h: number; color: string }[];
+}
+
+export interface DogDefinition {
+  name: string;
+  position: { x: number; y: number };
+  colors: DogColors;
+  collarColor: string;
+}
+
+// Cachorrinhos interativos no jardim
+export const DOGS: DogDefinition[] = [
+  {
+    name: "Nala",
+    position: { x: 20, y: 18 },
+    colors: {
+      body: "#c4913b",
+      bodyDark: "#a07830",
+      ear: "#8b6914",
+      snout: "#d4a84a",
+      belly: "#d4a84a",
+    },
+    collarColor: "#e74c3c",
+  },
+  {
+    name: "Boris",
+    position: { x: 17, y: 16 },
+    colors: {
+      body: "#2a2a2a",
+      bodyDark: "#1a1a1a",
+      ear: "#1a1a1a",
+      snout: "#e8e8e8",
+      belly: "#e8e8e8",
+    },
+    collarColor: "#3498db",
+  },
+  {
+    name: "Alasca",
+    position: { x: 22, y: 16 },
+    colors: {
+      body: "#f0f0f0",
+      bodyDark: "#d0d0d0",
+      ear: "#e0d8d0",
+      snout: "#f5e6d0",
+      belly: "#f5e6d0",
+      spots: [{ x: 5, y: 6, w: 3, h: 2, color: "#2a2a2a" }],
+    },
+    collarColor: "#e91e63",
+  },
+  {
+    name: "Meg",
+    position: { x: 19, y: 20 },
+    colors: {
+      body: "#a0a0a0",
+      bodyDark: "#787878",
+      ear: "#222222",
+      snout: "#b8b8b8",
+      belly: "#b8b8b8",
+      spots: [
+        { x: 4, y: 5, w: 3, h: 3, color: "#1a1a1a" },
+        { x: 8, y: 7, w: 3, h: 2, color: "#222222" },
+        { x: 5, y: 10, w: 2, h: 2, color: "#1a1a1a" },
+      ],
+    },
+    collarColor: "#9b59b6",
+  },
 ];
+
+// Compatibilidade — posicao do primeiro cachorro
+export const DOG_POSITION = DOGS[0].position;
 
 // Lounge entre Room 8 e Room 9 (3 tiles centrais do gap de 5)
 export const LOUNGE = {

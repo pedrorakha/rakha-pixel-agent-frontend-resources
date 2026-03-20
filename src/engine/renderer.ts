@@ -15,9 +15,10 @@ import {
   CAFE,
   ROOM_DOORS,
   GARDEN,
-  DOG_POSITION,
+  DOGS,
   LOUNGE,
 } from "@/lib/constants";
+import type { DogColors } from "@/lib/constants";
 import { Character, CharacterState, AccessoryHat, AccessoryGlasses, HairStyle } from "@/types/character";
 import { Desk } from "@/types/office";
 import { DiscordStatus } from "@/types/discord";
@@ -56,8 +57,8 @@ export class Renderer {
     footprints?: Footprint[],
     lockedDoors?: Set<number>,
     playerNearDoorRoom?: number,
-    dogPetFrame?: number,
-    dogPos?: { x: number; y: number; state: string; direction: string }
+    dogPetFrames?: number[],
+    dogPositions?: { x: number; y: number; state: string; direction: string }[]
   ): void {
     const ctx = this.ctx;
     if (!ctx) return;
@@ -98,8 +99,12 @@ export class Renderer {
     // Layer 2.75: Lounge (entre Room 8 e Room 9)
     this.renderLounge(ctx, state);
 
-    // Layer 2.8: Dog
-    this.renderDog(ctx, state, dogPetFrame ?? -1, dogPos);
+    // Layer 2.8: Dogs
+    for (let di = 0; di < DOGS.length; di++) {
+      const petFrame = dogPetFrames?.[di] ?? -1;
+      const pos = dogPositions?.[di];
+      this.renderDog(ctx, state, petFrame, DOGS[di].colors, DOGS[di].collarColor, DOGS[di].name, pos);
+    }
 
     // Layer 2.9: Door overlays (todas as rooms)
     if (lockedDoors) {
@@ -867,18 +872,26 @@ export class Renderer {
     ctx: CanvasRenderingContext2D,
     state: GameState,
     petFrame: number,
+    colors: DogColors,
+    collarColor: string,
+    name: string,
     dogPos?: { x: number; y: number; state: string; direction: string }
   ): void {
-    const z = state.camera.zoom;
-    const posX = dogPos?.x ?? DOG_POSITION.x;
-    const posY = dogPos?.y ?? DOG_POSITION.y;
+    const zoom = state.camera.zoom;
+    const posX = dogPos?.x ?? DOGS[0].position.x;
+    const posY = dogPos?.y ?? DOGS[0].position.y;
     const isWalking = dogPos?.state === "walking";
     const facingLeft = dogPos?.direction === "left";
-    const { x: dx, y: dy } = this.worldToScreen(
+    const { x: sx, y: sy } = this.worldToScreen(
       state,
       posX * TILE_SIZE,
       posY * TILE_SIZE
     );
+
+    // Escala reduzida (metade) — centraliza no tile
+    const z = zoom * 0.5;
+    const dx = sx + (TILE_SIZE * zoom - TILE_SIZE * z) / 2;
+    const dy = sy + (TILE_SIZE * zoom - TILE_SIZE * z) / 2;
 
     const tailPhase = Math.sin(state.time * (isWalking ? 10 : 6));
     const isPetted = petFrame >= 0 && petFrame < 60;
@@ -899,26 +912,34 @@ export class Renderer {
 
       // Rabo (atras, visivel apenas de costas)
       if (!facingDown) {
-        ctx.fillStyle = COLORS.dogBody;
+        ctx.fillStyle = colors.body;
         const tw = tailPhase * z;
         ctx.fillRect(dx + 7 * z + tw, dy + z + bob, 2 * z, 3 * z);
       }
 
       // Corpo (oval visto de cima/frente)
-      ctx.fillStyle = COLORS.dogBody;
+      ctx.fillStyle = colors.body;
       ctx.fillRect(dx + 3 * z, dy + 4 * z + bob + breathe, 10 * z, 8 * z);
       ctx.fillRect(dx + 4 * z, dy + 3 * z + bob + breathe, 8 * z, z);
-      ctx.fillStyle = COLORS.dogBodyDark;
+      ctx.fillStyle = colors.bodyDark;
       ctx.fillRect(dx + 3 * z, dy + 11 * z + bob + breathe, 10 * z, z);
 
+      // Pintinha (spot) no corpo — vista frontal/costas
+      if (colors.spots) {
+        for (const sp of colors.spots) {
+          ctx.fillStyle = sp.color;
+          ctx.fillRect(dx + sp.x * z, dy + sp.y * z + bob + breathe, sp.w * z, sp.h * z);
+        }
+      }
+
       // Cabeca
-      ctx.fillStyle = COLORS.dogBody;
+      ctx.fillStyle = colors.body;
       if (facingDown) {
         // Frente — cabeca embaixo
         ctx.fillRect(dx + 4 * z, dy + 11 * z + bob, 8 * z, 5 * z);
         ctx.fillRect(dx + 5 * z, dy + 15 * z + bob, 6 * z, z);
         // Focinho
-        ctx.fillStyle = "#d4a84a";
+        ctx.fillStyle = colors.snout;
         ctx.fillRect(dx + 6 * z, dy + 14 * z + bob, 4 * z, 2 * z);
         // Olhos
         ctx.fillStyle = "#1a1a2e";
@@ -931,7 +952,7 @@ export class Renderer {
         ctx.fillStyle = COLORS.dogNose;
         ctx.fillRect(dx + 7.5 * z, dy + 14 * z + bob, z, z);
         // Orelhas
-        ctx.fillStyle = COLORS.dogEar;
+        ctx.fillStyle = colors.ear;
         ctx.fillRect(dx + 3 * z, dy + 11 * z + bob, 2 * z, 3 * z);
         ctx.fillRect(dx + 11 * z, dy + 11 * z + bob, 2 * z, 3 * z);
       } else {
@@ -939,16 +960,16 @@ export class Renderer {
         ctx.fillRect(dx + 4 * z, dy + bob, 8 * z, 5 * z);
         ctx.fillRect(dx + 5 * z, dy - z + bob, 6 * z, z);
         // Orelhas
-        ctx.fillStyle = COLORS.dogEar;
+        ctx.fillStyle = colors.ear;
         ctx.fillRect(dx + 3 * z, dy + bob, 2 * z, 3 * z);
         ctx.fillRect(dx + 11 * z, dy + bob, 2 * z, 3 * z);
         // Topo da cabeca mais escuro
-        ctx.fillStyle = COLORS.dogBodyDark;
+        ctx.fillStyle = colors.bodyDark;
         ctx.fillRect(dx + 5 * z, dy + z + bob, 6 * z, z);
       }
 
       // Coleira
-      ctx.fillStyle = "#e74c3c";
+      ctx.fillStyle = collarColor;
       const collarY = facingDown ? dy + 11 * z + bob : dy + 4 * z + bob;
       ctx.fillRect(dx + 4 * z, collarY, 8 * z, z);
       ctx.fillStyle = "#f1c40f";
@@ -962,7 +983,7 @@ export class Renderer {
       for (let i = 0; i < legPairs.length; i++) {
         const lp = legPairs[i];
         const lo = (i % 2 === 0 ? legPhase : -legPhase);
-        ctx.fillStyle = COLORS.dogBodyDark;
+        ctx.fillStyle = colors.bodyDark;
         ctx.fillRect(dx + lp.lx * z, dy + lp.ly * z + bob + breathe + lo, 2 * z, 2 * z);
         ctx.fillRect(dx + lp.rx * z, dy + lp.ly * z + bob + breathe - lo, 2 * z, 2 * z);
       }
@@ -985,32 +1006,40 @@ export class Renderer {
       ctx.fillRect(dx + 2 * z, dy + 13 * z, 13 * z, 2 * z);
 
       // Rabo
-      ctx.fillStyle = COLORS.dogBody;
+      ctx.fillStyle = colors.body;
       const tailAngle = tailPhase * 2 * z;
       ctx.fillRect(dx, dy + 3 * z + tailAngle + bob, 2 * z, 4 * z);
-      ctx.fillStyle = COLORS.dogBodyDark;
+      ctx.fillStyle = colors.bodyDark;
       ctx.fillRect(dx, dy + 3 * z + tailAngle + bob, z, 4 * z);
 
       // Corpo
-      ctx.fillStyle = COLORS.dogBody;
+      ctx.fillStyle = colors.body;
       ctx.fillRect(dx + 2 * z, dy + 5 * z + bob + breathe, 11 * z, 7 * z);
       ctx.fillRect(dx + 3 * z, dy + 4 * z + bob + breathe, 9 * z, z);
-      ctx.fillStyle = "#d4a84a";
+      ctx.fillStyle = colors.belly;
       ctx.fillRect(dx + 4 * z, dy + 9 * z + bob + breathe, 7 * z, 2 * z);
-      ctx.fillStyle = COLORS.dogBodyDark;
+      ctx.fillStyle = colors.bodyDark;
       ctx.fillRect(dx + 2 * z, dy + 11 * z + bob + breathe, 11 * z, z);
 
+      // Pintinha (spot) no corpo — vista lateral
+      if (colors.spots) {
+        for (const sp of colors.spots) {
+          ctx.fillStyle = sp.color;
+          ctx.fillRect(dx + sp.x * z, dy + sp.y * z + bob + breathe, sp.w * z, sp.h * z);
+        }
+      }
+
       // Cabeca
-      ctx.fillStyle = COLORS.dogBody;
+      ctx.fillStyle = colors.body;
       ctx.fillRect(dx + 11 * z, dy + 2 * z + bob, 5 * z, 7 * z);
       ctx.fillRect(dx + 12 * z, dy + z + bob, 3 * z, z);
-      ctx.fillStyle = "#d4a84a";
+      ctx.fillStyle = colors.snout;
       ctx.fillRect(dx + 13 * z, dy + 6 * z + bob, 3 * z, 2 * z);
 
       // Orelha
-      ctx.fillStyle = COLORS.dogEar;
+      ctx.fillStyle = colors.ear;
       ctx.fillRect(dx + 14 * z, dy + bob, 2 * z, 4 * z);
-      ctx.fillStyle = COLORS.dogBodyDark;
+      ctx.fillStyle = colors.bodyDark;
       ctx.fillRect(dx + 14 * z, dy + bob, z, 4 * z);
 
       // Olho
@@ -1036,14 +1065,14 @@ export class Renderer {
       for (let i = 0; i < patas.length; i++) {
         const px = patas[i];
         const legOff = (i % 2 === 0 ? legPhase : -legPhase);
-        ctx.fillStyle = COLORS.dogBodyDark;
+        ctx.fillStyle = colors.bodyDark;
         ctx.fillRect(dx + px * z, dy + 12 * z + bob + breathe + legOff, 2 * z, 2 * z);
-        ctx.fillStyle = "#d4a84a";
+        ctx.fillStyle = colors.belly;
         ctx.fillRect(dx + px * z, dy + 13 * z + bob + breathe + legOff, 2 * z, z);
       }
 
       // Coleira
-      ctx.fillStyle = "#e74c3c";
+      ctx.fillStyle = collarColor;
       ctx.fillRect(dx + 10 * z, dy + 8 * z + bob, z, 2 * z);
       ctx.fillStyle = "#f1c40f";
       ctx.fillRect(dx + 10 * z, dy + 9 * z + bob, z, z);
@@ -1067,9 +1096,9 @@ export class Renderer {
 
     // Nome do cachorro acima (fora do save/restore para nao espelhar)
     ctx.fillStyle = "rgba(255,255,255,0.7)";
-    ctx.font = `${Math.max(4, 4 * z)}px "Press Start 2P", monospace`;
+    ctx.font = `${Math.max(4, 4 * zoom)}px "Press Start 2P", monospace`;
     ctx.textAlign = "center";
-    ctx.fillText("Rakher", dx + 8 * z, dy - 4 * z);
+    ctx.fillText(name, sx + 8 * zoom, dy - 6 * z);
     ctx.textAlign = "start";
   }
 

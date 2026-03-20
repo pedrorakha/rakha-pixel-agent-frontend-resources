@@ -41,7 +41,7 @@ import {
   ROOMS,
   MEETING_ROOM_INDEX,
   ROOM_DOORS,
-  DOG_POSITION,
+  DOGS,
   GARDEN,
   STATIC_BLOCKED_TILES,
 } from "@/lib/constants";
@@ -215,22 +215,24 @@ export function OfficeCanvas({ sidebarOpen, onToggleSidebar, onOpenVisualEditor 
   const [charMenu, setCharMenu] = useState<{ screenX: number; screenY: number } | null>(null);
   const [interactMenu, setInteractMenu] = useState<{ screenX: number; screenY: number; targetId: string; targetName: string } | null>(null);
   const [lockedDoors, setLockedDoors] = useState<Set<number>>(new Set());
-  const dogPetFrameRef = useRef(-1);
+  const dogPetFramesRef = useRef<number[]>(DOGS.map(() => -1));
 
-  // Estado dinâmico do cachorro (anda pelo garden, senta, repete)
-  const dogRef = useRef({
-    x: DOG_POSITION.x,
-    y: DOG_POSITION.y,
-    state: "sitting" as "walking" | "sitting",
-    direction: "right" as "left" | "right" | "up" | "down",
-    timer: 0,
-    walkDuration: 3,   // segundos andando
-    sitDuration: 4,    // segundos sentado
-    moveTimer: 0,
-    moveInterval: 0.4, // segundos entre cada tile ao andar
-    targetX: DOG_POSITION.x,
-    targetY: DOG_POSITION.y,
-  });
+  // Estado dinâmico dos cachorros (andam pelo garden, sentam, repetem)
+  const dogsRef = useRef(
+    DOGS.map((def) => ({
+      x: def.position.x,
+      y: def.position.y,
+      state: "sitting" as "walking" | "sitting",
+      direction: "right" as "left" | "right" | "up" | "down",
+      timer: 0,
+      walkDuration: 3 + Math.random() * 2,
+      sitDuration: 3 + Math.random() * 4,
+      moveTimer: 0,
+      moveInterval: 0.35 + Math.random() * 0.15,
+      targetX: def.position.x,
+      targetY: def.position.y,
+    }))
+  );
 
   const chatInputRef = useRef<HTMLInputElement>(null);
   const historyEndRef = useRef<HTMLDivElement>(null);
@@ -480,9 +482,12 @@ export function OfficeCanvas({ sidebarOpen, onToggleSidebar, onOpenVisualEditor 
   const isNearAnyDoor = nearDoorRoomIndex >= 0;
   const isNearRoomLocked = isNearAnyDoor && lockedDoors.has(nearDoorRoomIndex);
   const isNearDog = currentPlayerChar
-    ? Math.abs(currentPlayerChar.gridX - dogRef.current.x) <= 1 &&
-      Math.abs(currentPlayerChar.gridY - dogRef.current.y) <= 1 &&
-      !(currentPlayerChar.gridX === dogRef.current.x && currentPlayerChar.gridY === dogRef.current.y)
+    ? dogsRef.current.some(
+        (dog) =>
+          Math.abs(currentPlayerChar.gridX - dog.x) <= 1 &&
+          Math.abs(currentPlayerChar.gridY - dog.y) <= 1 &&
+          !(currentPlayerChar.gridX === dog.x && currentPlayerChar.gridY === dog.y)
+      )
     : false;
   const playersInSameRoom = myRoom >= 0
     ? characters.filter((c) => {
@@ -587,7 +592,7 @@ export function OfficeCanvas({ sidebarOpen, onToggleSidebar, onOpenVisualEditor 
       const tag = (e.target as HTMLElement)?.tagName;
       const isInputFocused = tag === "INPUT" || tag === "TEXTAREA" || tag === "BUTTON";
 
-      if (e.code === "Space" && !isInputFocused) {
+      if (e.code === "Space" && !isInputFocused && !e.repeat) {
         e.preventDefault();
         const char = charactersRef.current.find(
           (c) => c.id === selectedMemberIdRef.current
@@ -605,13 +610,16 @@ export function OfficeCanvas({ sidebarOpen, onToggleSidebar, onOpenVisualEditor 
           return;
         }
 
-        // Verifica se esta adjacente ao cachorro (posicao dinamica)
-        const dogNear = Math.abs(char.gridX - dogRef.current.x) <= 1 &&
-          Math.abs(char.gridY - dogRef.current.y) <= 1 &&
-          !(char.gridX === dogRef.current.x && char.gridY === dogRef.current.y);
-        if (dogNear && dogPetFrameRef.current < 0) {
-          dogPetFrameRef.current = 0;
-          return;
+        // Verifica se esta adjacente a algum cachorro (posicao dinamica)
+        for (let di = 0; di < dogsRef.current.length; di++) {
+          const dog = dogsRef.current[di];
+          const dogNear = Math.abs(char.gridX - dog.x) <= 1 &&
+            Math.abs(char.gridY - dog.y) <= 1 &&
+            !(char.gridX === dog.x && char.gridY === dog.y);
+          if (dogNear && dogPetFramesRef.current[di] < 0) {
+            dogPetFramesRef.current[di] = 0;
+            return;
+          }
         }
 
         // Pulo normal
@@ -927,76 +935,78 @@ export function OfficeCanvas({ sidebarOpen, onToggleSidebar, onOpenVisualEditor 
       updateReactions(deltaTime);
       updateFootprints();
 
-      // Atualiza animacao do cachorro (pet)
-      if (dogPetFrameRef.current >= 0) {
-        dogPetFrameRef.current += 1;
-        if (dogPetFrameRef.current >= 60) {
-          dogPetFrameRef.current = -1;
+      // Atualiza animacao dos cachorros (pet)
+      for (let di = 0; di < dogPetFramesRef.current.length; di++) {
+        if (dogPetFramesRef.current[di] >= 0) {
+          dogPetFramesRef.current[di] += 1;
+          if (dogPetFramesRef.current[di] >= 60) {
+            dogPetFramesRef.current[di] = -1;
+          }
         }
       }
 
-      // Atualiza movimento do cachorro (anda pelo garden, senta, repete)
-      const dog = dogRef.current;
-      dog.timer += deltaTime;
-
       // Tiles bloqueadas do garden (arvores, cerca, etc)
-      const isDogBlocked = (tx: number, ty: number) =>
+      const isDogBlocked = (tx: number, ty: number, selfIndex: number) =>
         STATIC_BLOCKED_TILES.some((t) => t.x === tx && t.y === ty) ||
         tx < GARDEN.x || tx >= GARDEN.x + GARDEN.w ||
-        ty < GARDEN.y || ty >= GARDEN.y + GARDEN.h;
+        ty < GARDEN.y || ty >= GARDEN.y + GARDEN.h ||
+        dogsRef.current.some((other, oi) => oi !== selfIndex && other.x === tx && other.y === ty);
 
-      if (dog.state === "sitting") {
-        if (dog.timer >= dog.sitDuration) {
-          dog.state = "walking";
-          dog.timer = 0;
-          dog.walkDuration = 2 + Math.random() * 3;
-          // Escolhe destino aleatorio valido dentro do garden
-          for (let attempt = 0; attempt < 20; attempt++) {
-            const tx = GARDEN.x + 1 + Math.floor(Math.random() * (GARDEN.w - 2));
-            const ty = GARDEN.y + 2 + Math.floor(Math.random() * (GARDEN.h - 3));
-            if (!isDogBlocked(tx, ty)) {
-              dog.targetX = tx;
-              dog.targetY = ty;
-              break;
+      // Atualiza movimento de cada cachorro
+      for (let di = 0; di < dogsRef.current.length; di++) {
+        const dog = dogsRef.current[di];
+        dog.timer += deltaTime;
+
+        if (dog.state === "sitting") {
+          if (dog.timer >= dog.sitDuration) {
+            dog.state = "walking";
+            dog.timer = 0;
+            dog.walkDuration = 2 + Math.random() * 3;
+            for (let attempt = 0; attempt < 20; attempt++) {
+              const tx = GARDEN.x + 1 + Math.floor(Math.random() * (GARDEN.w - 2));
+              const ty = GARDEN.y + 2 + Math.floor(Math.random() * (GARDEN.h - 3));
+              if (!isDogBlocked(tx, ty, di)) {
+                dog.targetX = tx;
+                dog.targetY = ty;
+                break;
+              }
             }
           }
-        }
-      } else {
-        dog.moveTimer += deltaTime;
-        if (dog.moveTimer >= dog.moveInterval) {
-          dog.moveTimer = 0;
-          const ddx = dog.targetX - dog.x;
-          const ddy = dog.targetY - dog.y;
-          if (ddx === 0 && ddy === 0) {
+        } else {
+          dog.moveTimer += deltaTime;
+          if (dog.moveTimer >= dog.moveInterval) {
+            dog.moveTimer = 0;
+            const ddx = dog.targetX - dog.x;
+            const ddy = dog.targetY - dog.y;
+            if (ddx === 0 && ddy === 0) {
+              dog.state = "sitting";
+              dog.timer = 0;
+              dog.sitDuration = 3 + Math.random() * 4;
+            } else {
+              let nx = dog.x;
+              let ny = dog.y;
+              if (Math.abs(ddx) >= Math.abs(ddy)) {
+                nx += ddx > 0 ? 1 : -1;
+                dog.direction = ddx > 0 ? "right" : "left";
+              } else {
+                ny += ddy > 0 ? 1 : -1;
+                dog.direction = ddy > 0 ? "down" : "up";
+              }
+              if (!isDogBlocked(nx, ny, di)) {
+                dog.x = nx;
+                dog.y = ny;
+              } else {
+                dog.state = "sitting";
+                dog.timer = 0;
+                dog.sitDuration = 1 + Math.random() * 2;
+              }
+            }
+          }
+          if (dog.timer >= dog.walkDuration) {
             dog.state = "sitting";
             dog.timer = 0;
             dog.sitDuration = 3 + Math.random() * 4;
-          } else {
-            let nx = dog.x;
-            let ny = dog.y;
-            if (Math.abs(ddx) >= Math.abs(ddy)) {
-              nx += ddx > 0 ? 1 : -1;
-              dog.direction = ddx > 0 ? "right" : "left";
-            } else {
-              ny += ddy > 0 ? 1 : -1;
-              dog.direction = ddy > 0 ? "down" : "up";
-            }
-            // So move se a proxima tile nao esta bloqueada
-            if (!isDogBlocked(nx, ny)) {
-              dog.x = nx;
-              dog.y = ny;
-            } else {
-              // Bloqueado, senta e tenta outro destino no proximo ciclo
-              dog.state = "sitting";
-              dog.timer = 0;
-              dog.sitDuration = 1 + Math.random() * 2;
-            }
           }
-        }
-        if (dog.timer >= dog.walkDuration) {
-          dog.state = "sitting";
-          dog.timer = 0;
-          dog.sitDuration = 3 + Math.random() * 4;
         }
       }
 
@@ -1085,8 +1095,8 @@ export function OfficeCanvas({ sidebarOpen, onToggleSidebar, onOpenVisualEditor 
         footprintsRef.current,
         lockedDoorsRef.current,
         nearDoorRoom,
-        dogPetFrameRef.current,
-        { x: dogRef.current.x, y: dogRef.current.y, state: dogRef.current.state, direction: dogRef.current.direction }
+        [...dogPetFramesRef.current],
+        dogsRef.current.map((d) => ({ x: d.x, y: d.y, state: d.state, direction: d.direction }))
       );
     },
     [ctx, cameraX, cameraY, zoom, size, storeDesks, presences, presenceMap]
