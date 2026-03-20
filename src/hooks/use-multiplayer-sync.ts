@@ -206,6 +206,10 @@ export function useMultiplayerSync({
       onInteractRef.current?.(data);
     });
 
+    socket.on("admin:force-reload", () => {
+      window.location.reload();
+    });
+
     socket.on("player:leave", (data: PlayerLeavePayload) => {
       setOnlinePlayers((prev) => {
         const next = new Set(prev);
