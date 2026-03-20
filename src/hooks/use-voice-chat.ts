@@ -370,6 +370,10 @@ export function useVoiceChat({ playerName, gridX, gridY, enabled, playersInSameR
     toggleSound,
     toggleMuteParticipant,
     leaveCall,
-    roomLabel: currentRoom >= 0 ? ROOMS[currentRoom].label : null,
+    roomLabel: currentRoom === COMMUNAL_AREA_ROOM
+      ? "Common Area"
+      : currentRoom >= 0 && currentRoom < ROOMS.length
+        ? ROOMS[currentRoom].label
+        : null,
   };
 }
