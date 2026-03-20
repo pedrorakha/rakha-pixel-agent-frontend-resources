@@ -12,10 +12,11 @@ import {
   ROOM_FURNITURE,
   ROOMS,
   MEETING_ROOM_INDEX,
-  CAFE_ROOM_INDEX,
+  CAFE,
   ROOM_DOORS,
   GARDEN,
   DOG_POSITION,
+  LOUNGE,
 } from "@/lib/constants";
 import { Character, CharacterState, AccessoryHat, AccessoryGlasses, HairStyle } from "@/types/character";
 import { Desk } from "@/types/office";
@@ -55,7 +56,8 @@ export class Renderer {
     footprints?: Footprint[],
     lockedDoors?: Set<number>,
     playerNearDoorRoom?: number,
-    dogPetFrame?: number
+    dogPetFrame?: number,
+    dogPos?: { x: number; y: number; state: string; direction: string }
   ): void {
     const ctx = this.ctx;
     if (!ctx) return;
@@ -93,8 +95,11 @@ export class Renderer {
     // Layer 2.7: Garden decorations
     this.renderGarden(ctx, state);
 
+    // Layer 2.75: Lounge (entre Room 8 e Room 9)
+    this.renderLounge(ctx, state);
+
     // Layer 2.8: Dog
-    this.renderDog(ctx, state, dogPetFrame ?? -1);
+    this.renderDog(ctx, state, dogPetFrame ?? -1, dogPos);
 
     // Layer 2.9: Door overlays (todas as rooms)
     if (lockedDoors) {
@@ -601,15 +606,12 @@ export class Renderer {
     ctx: CanvasRenderingContext2D,
     state: GameState
   ): void {
-    const room = ROOMS[CAFE_ROOM_INDEX];
-    if (!room) return;
-
     const zoom = state.camera.zoom;
     const ts = TILE_SIZE * zoom;
 
     // Balcão do café (canto superior direito, 2x3 vertical)
-    const barX = room.x + room.w - 3;
-    const barY = room.y;
+    const barX = CAFE.x + CAFE.w - 3;
+    const barY = CAFE.y;
     const { x: bx, y: by } = this.worldToScreen(state, barX * TILE_SIZE, barY * TILE_SIZE);
     ctx.fillStyle = COLORS.desk;
     ctx.fillRect(bx + zoom, by, 2 * ts - 2 * zoom, 3 * ts);
@@ -635,10 +637,10 @@ export class Renderer {
     ctx.fillStyle = "#2ecc71";
     ctx.fillRect(m2x + zoom, m2y + 2 * zoom, zoom, zoom);
 
-    // 2 mesas com cadeiras
+    // 2 mesas com cadeiras (centralizadas verticalmente)
     const tables = [
-      { x: room.x + 2, y: room.y + 1 },
-      { x: room.x + 7, y: room.y + 1 },
+      { x: CAFE.x + 2, y: CAFE.y + 4 },
+      { x: CAFE.x + 7, y: CAFE.y + 4 },
     ];
     for (const table of tables) {
       const { x: tx, y: ty } = this.worldToScreen(state, table.x * TILE_SIZE, table.y * TILE_SIZE);
@@ -681,8 +683,8 @@ export class Renderer {
     }
 
     // Planta canto inferior esquerdo
-    const plantX = room.x;
-    const plantY = room.y + room.h - 2;
+    const plantX = CAFE.x;
+    const plantY = CAFE.y + CAFE.h - 2;
     const { x: px, y: py } = this.worldToScreen(state, plantX * TILE_SIZE, plantY * TILE_SIZE);
     ctx.fillStyle = COLORS.plantPot;
     ctx.fillRect(px + 3 * zoom, py + 8 * zoom, 10 * zoom, 6 * zoom);
@@ -691,8 +693,8 @@ export class Renderer {
     ctx.fillRect(px + 8 * zoom, py + 3 * zoom, 4 * zoom, 5 * zoom);
 
     // Label
-    const cafeLabelX = room.x + room.w / 2;
-    const cafeLabelY = room.y + room.h - 0.5;
+    const cafeLabelX = CAFE.x + CAFE.w / 2;
+    const cafeLabelY = CAFE.y + CAFE.h - 0.5;
     const { x: clx, y: cly } = this.worldToScreen(state, cafeLabelX * TILE_SIZE, cafeLabelY * TILE_SIZE);
     ctx.fillStyle = "rgba(255,255,255,0.15)";
     ctx.font = `${Math.max(5, 5 * zoom)}px "Press Start 2P", monospace`;
@@ -732,16 +734,16 @@ export class Renderer {
     const zoom = state.camera.zoom;
     const ts = TILE_SIZE * zoom;
 
-    // Flores espalhadas pela grama
+    // Flores espalhadas pela grama (ajustadas para garden 12x10)
     const flowers = [
       { x: GARDEN.x + 1, y: GARDEN.y + 1, color: COLORS.flowerRed },
-      { x: GARDEN.x + 4, y: GARDEN.y + 2, color: COLORS.flowerYellow },
-      { x: GARDEN.x + 8, y: GARDEN.y + 1, color: COLORS.flowerBlue },
+      { x: GARDEN.x + 5, y: GARDEN.y + 2, color: COLORS.flowerYellow },
+      { x: GARDEN.x + 9, y: GARDEN.y + 1, color: COLORS.flowerBlue },
       { x: GARDEN.x + 2, y: GARDEN.y + 5, color: COLORS.flowerPink },
       { x: GARDEN.x + 10, y: GARDEN.y + 4, color: COLORS.flowerRed },
-      { x: GARDEN.x + 6, y: GARDEN.y + 7, color: COLORS.flowerYellow },
-      { x: GARDEN.x + 11, y: GARDEN.y + 8, color: COLORS.flowerBlue },
-      { x: GARDEN.x + 1, y: GARDEN.y + 8, color: COLORS.flowerPink },
+      { x: GARDEN.x + 7, y: GARDEN.y + 7, color: COLORS.flowerYellow },
+      { x: GARDEN.x + 1, y: GARDEN.y + 8, color: COLORS.flowerBlue },
+      { x: GARDEN.x + 9, y: GARDEN.y + 8, color: COLORS.flowerPink },
     ];
 
     for (const f of flowers) {
@@ -803,91 +805,249 @@ export class Renderer {
     ctx.textAlign = "start";
   }
 
+  private renderLounge(
+    ctx: CanvasRenderingContext2D,
+    state: GameState
+  ): void {
+    const zoom = state.camera.zoom;
+    const ts = TILE_SIZE * zoom;
+
+    // Bebedouro (topo central do lounge)
+    const wX = LOUNGE.x + 1;
+    const wY = LOUNGE.y + 1;
+    const { x: wx, y: wy } = this.worldToScreen(state, wX * TILE_SIZE, wY * TILE_SIZE);
+    // Corpo do bebedouro
+    ctx.fillStyle = "#aaaaaa";
+    ctx.fillRect(wx + 3 * zoom, wy + 2 * zoom, ts - 6 * zoom, ts - 4 * zoom);
+    // Base
+    ctx.fillStyle = "#888888";
+    ctx.fillRect(wx + 2 * zoom, wy + ts - 4 * zoom, ts - 4 * zoom, 3 * zoom);
+    // Topo
+    ctx.fillStyle = "#cccccc";
+    ctx.fillRect(wx + 4 * zoom, wy + zoom, ts - 8 * zoom, 3 * zoom);
+    // Botão
+    ctx.fillStyle = "#4fc3f7";
+    ctx.fillRect(wx + ts / 2 - zoom, wy + 5 * zoom, 2 * zoom, 2 * zoom);
+    // Copo
+    ctx.fillStyle = COLORS.mug;
+    ctx.fillRect(wx + ts / 2 - zoom, wy + ts - 7 * zoom, 3 * zoom, 3 * zoom);
+
+    // Banco (centro, 3 tiles wide)
+    const bY = LOUNGE.y + 4;
+    for (let bx = 0; bx < LOUNGE.w; bx++) {
+      const { x: sx, y: sy } = this.worldToScreen(state, (LOUNGE.x + bx) * TILE_SIZE, bY * TILE_SIZE);
+      // Assento
+      ctx.fillStyle = "#6b4513";
+      ctx.fillRect(sx + zoom, sy + 3 * zoom, ts - 2 * zoom, ts - 6 * zoom);
+      ctx.fillStyle = "#7a5220";
+      ctx.fillRect(sx + 2 * zoom, sy + 4 * zoom, ts - 4 * zoom, ts - 8 * zoom);
+      // Pernas
+      ctx.fillStyle = "#555555";
+      ctx.fillRect(sx + 2 * zoom, sy + ts - 3 * zoom, 2 * zoom, 3 * zoom);
+      ctx.fillRect(sx + ts - 4 * zoom, sy + ts - 3 * zoom, 2 * zoom, 3 * zoom);
+    }
+
+    // Planta (fundo central)
+    const pX = LOUNGE.x + 1;
+    const pY = LOUNGE.y + 6;
+    const { x: px, y: py } = this.worldToScreen(state, pX * TILE_SIZE, pY * TILE_SIZE);
+    // Vaso
+    ctx.fillStyle = COLORS.plantPot;
+    ctx.fillRect(px + 3 * zoom, py + 8 * zoom, ts - 6 * zoom, 6 * zoom);
+    ctx.fillRect(px + 2 * zoom, py + 7 * zoom, ts - 4 * zoom, 2 * zoom);
+    // Folhas
+    ctx.fillStyle = COLORS.plant;
+    ctx.fillRect(px + 4 * zoom, py + 2 * zoom, 4 * zoom, 6 * zoom);
+    ctx.fillRect(px + 7 * zoom, py + 3 * zoom, 4 * zoom, 4 * zoom);
+    ctx.fillStyle = COLORS.plantDark;
+    ctx.fillRect(px + 3 * zoom, py + 4 * zoom, 3 * zoom, 3 * zoom);
+  }
+
   private renderDog(
     ctx: CanvasRenderingContext2D,
     state: GameState,
-    petFrame: number
+    petFrame: number,
+    dogPos?: { x: number; y: number; state: string; direction: string }
   ): void {
     const z = state.camera.zoom;
+    const posX = dogPos?.x ?? DOG_POSITION.x;
+    const posY = dogPos?.y ?? DOG_POSITION.y;
+    const isWalking = dogPos?.state === "walking";
+    const facingLeft = dogPos?.direction === "left";
     const { x: dx, y: dy } = this.worldToScreen(
       state,
-      DOG_POSITION.x * TILE_SIZE,
-      DOG_POSITION.y * TILE_SIZE
+      posX * TILE_SIZE,
+      posY * TILE_SIZE
     );
 
-    const tailPhase = Math.sin(state.time * 6);
+    const tailPhase = Math.sin(state.time * (isWalking ? 10 : 6));
     const isPetted = petFrame >= 0 && petFrame < 60;
-    const bob = isPetted ? Math.sin(state.time * 10) * z : 0;
-    const breathe = Math.sin(state.time * 2) * z * 0.3;
+    const bob = isPetted ? Math.sin(state.time * 10) * z : isWalking ? Math.sin(state.time * 8) * z * 0.5 : 0;
+    const breathe = isWalking ? 0 : Math.sin(state.time * 2) * z * 0.3;
+    const legPhase = isWalking ? Math.sin(state.time * 12) * z * 1.5 : 0;
+    const dir = dogPos?.direction ?? "right";
 
-    // Sombra
-    ctx.fillStyle = "rgba(0,0,0,0.1)";
-    ctx.fillRect(dx + 2 * z, dy + 13 * z, 13 * z, 2 * z);
+    ctx.save();
 
-    // Rabo
-    ctx.fillStyle = COLORS.dogBody;
-    const tailAngle = tailPhase * 2 * z;
-    ctx.fillRect(dx, dy + 3 * z + tailAngle + bob, 2 * z, 4 * z);
-    ctx.fillStyle = COLORS.dogBodyDark;
-    ctx.fillRect(dx, dy + 3 * z + tailAngle + bob, z, 4 * z);
+    if (dir === "up" || dir === "down") {
+      // Vista de cima (costas) ou de frente
+      const facingDown = dir === "down";
 
-    // Corpo — arredondado
-    ctx.fillStyle = COLORS.dogBody;
-    ctx.fillRect(dx + 2 * z, dy + 5 * z + bob + breathe, 11 * z, 7 * z);
-    ctx.fillRect(dx + 3 * z, dy + 4 * z + bob + breathe, 9 * z, z); // costas arredondada
-    // Barriga (mais clara)
-    ctx.fillStyle = "#d4a84a";
-    ctx.fillRect(dx + 4 * z, dy + 9 * z + bob + breathe, 7 * z, 2 * z);
-    // Sombra corporal
-    ctx.fillStyle = COLORS.dogBodyDark;
-    ctx.fillRect(dx + 2 * z, dy + 11 * z + bob + breathe, 11 * z, z);
+      // Sombra
+      ctx.fillStyle = "rgba(0,0,0,0.1)";
+      ctx.fillRect(dx + 2 * z, dy + 14 * z, 12 * z, 2 * z);
 
-    // Cabeca — arredondada
-    ctx.fillStyle = COLORS.dogBody;
-    ctx.fillRect(dx + 11 * z, dy + 2 * z + bob, 5 * z, 7 * z);
-    ctx.fillRect(dx + 12 * z, dy + z + bob, 3 * z, z); // topo arredondado
-    // Focinho (area mais clara)
-    ctx.fillStyle = "#d4a84a";
-    ctx.fillRect(dx + 13 * z, dy + 6 * z + bob, 3 * z, 2 * z);
+      // Rabo (atras, visivel apenas de costas)
+      if (!facingDown) {
+        ctx.fillStyle = COLORS.dogBody;
+        const tw = tailPhase * z;
+        ctx.fillRect(dx + 7 * z + tw, dy + z + bob, 2 * z, 3 * z);
+      }
 
-    // Orelha — caida
-    ctx.fillStyle = COLORS.dogEar;
-    ctx.fillRect(dx + 14 * z, dy + bob, 2 * z, 4 * z);
-    ctx.fillStyle = COLORS.dogBodyDark;
-    ctx.fillRect(dx + 14 * z, dy + bob, z, 4 * z); // sombra orelha
-
-    // Olho — com brilho
-    ctx.fillStyle = "#1a1a2e";
-    ctx.fillRect(dx + 12 * z, dy + 3.5 * z + bob, 1.5 * z, 1.5 * z);
-    ctx.fillStyle = "#fff";
-    ctx.fillRect(dx + 12 * z, dy + 3.5 * z + bob, z * 0.6, z * 0.6);
-
-    // Nariz
-    ctx.fillStyle = COLORS.dogNose;
-    ctx.fillRect(dx + 15 * z, dy + 5.5 * z + bob, z * 1.2, z);
-
-    // Lingua
-    if (isPetted) {
-      ctx.fillStyle = COLORS.dogTongue;
-      ctx.fillRect(dx + 14 * z, dy + 8 * z + bob, z, 2.5 * z);
-      ctx.fillStyle = "#c0392b";
-      ctx.fillRect(dx + 14 * z, dy + 10 * z + bob, z, z * 0.5);
-    }
-
-    // Patas — com detalhe
-    const patas = [3, 5, 9, 11];
-    for (const px of patas) {
+      // Corpo (oval visto de cima/frente)
+      ctx.fillStyle = COLORS.dogBody;
+      ctx.fillRect(dx + 3 * z, dy + 4 * z + bob + breathe, 10 * z, 8 * z);
+      ctx.fillRect(dx + 4 * z, dy + 3 * z + bob + breathe, 8 * z, z);
       ctx.fillStyle = COLORS.dogBodyDark;
-      ctx.fillRect(dx + px * z, dy + 12 * z + bob + breathe, 2 * z, 2 * z);
-      ctx.fillStyle = "#d4a84a";
-      ctx.fillRect(dx + px * z, dy + 13 * z + bob + breathe, 2 * z, z);
-    }
+      ctx.fillRect(dx + 3 * z, dy + 11 * z + bob + breathe, 10 * z, z);
 
-    // Coleira
-    ctx.fillStyle = "#e74c3c";
-    ctx.fillRect(dx + 10 * z, dy + 8 * z + bob, z, 2 * z);
-    ctx.fillStyle = "#f1c40f";
-    ctx.fillRect(dx + 10 * z, dy + 9 * z + bob, z, z);
+      // Cabeca
+      ctx.fillStyle = COLORS.dogBody;
+      if (facingDown) {
+        // Frente — cabeca embaixo
+        ctx.fillRect(dx + 4 * z, dy + 11 * z + bob, 8 * z, 5 * z);
+        ctx.fillRect(dx + 5 * z, dy + 15 * z + bob, 6 * z, z);
+        // Focinho
+        ctx.fillStyle = "#d4a84a";
+        ctx.fillRect(dx + 6 * z, dy + 14 * z + bob, 4 * z, 2 * z);
+        // Olhos
+        ctx.fillStyle = "#1a1a2e";
+        ctx.fillRect(dx + 5.5 * z, dy + 12 * z + bob, 1.5 * z, 1.5 * z);
+        ctx.fillRect(dx + 9 * z, dy + 12 * z + bob, 1.5 * z, 1.5 * z);
+        ctx.fillStyle = "#fff";
+        ctx.fillRect(dx + 5.5 * z, dy + 12 * z + bob, z * 0.6, z * 0.6);
+        ctx.fillRect(dx + 9 * z, dy + 12 * z + bob, z * 0.6, z * 0.6);
+        // Nariz
+        ctx.fillStyle = COLORS.dogNose;
+        ctx.fillRect(dx + 7.5 * z, dy + 14 * z + bob, z, z);
+        // Orelhas
+        ctx.fillStyle = COLORS.dogEar;
+        ctx.fillRect(dx + 3 * z, dy + 11 * z + bob, 2 * z, 3 * z);
+        ctx.fillRect(dx + 11 * z, dy + 11 * z + bob, 2 * z, 3 * z);
+      } else {
+        // Costas — cabeca em cima
+        ctx.fillRect(dx + 4 * z, dy + bob, 8 * z, 5 * z);
+        ctx.fillRect(dx + 5 * z, dy - z + bob, 6 * z, z);
+        // Orelhas
+        ctx.fillStyle = COLORS.dogEar;
+        ctx.fillRect(dx + 3 * z, dy + bob, 2 * z, 3 * z);
+        ctx.fillRect(dx + 11 * z, dy + bob, 2 * z, 3 * z);
+        // Topo da cabeca mais escuro
+        ctx.fillStyle = COLORS.dogBodyDark;
+        ctx.fillRect(dx + 5 * z, dy + z + bob, 6 * z, z);
+      }
+
+      // Coleira
+      ctx.fillStyle = "#e74c3c";
+      const collarY = facingDown ? dy + 11 * z + bob : dy + 4 * z + bob;
+      ctx.fillRect(dx + 4 * z, collarY, 8 * z, z);
+      ctx.fillStyle = "#f1c40f";
+      ctx.fillRect(dx + 7.5 * z, collarY, z, z);
+
+      // Patas (4 cantos)
+      const legPairs = [
+        { lx: 3, rx: 11, ly: facingDown ? 3 : 10 },
+        { lx: 4, rx: 10, ly: facingDown ? 10 : 3 },
+      ];
+      for (let i = 0; i < legPairs.length; i++) {
+        const lp = legPairs[i];
+        const lo = (i % 2 === 0 ? legPhase : -legPhase);
+        ctx.fillStyle = COLORS.dogBodyDark;
+        ctx.fillRect(dx + lp.lx * z, dy + lp.ly * z + bob + breathe + lo, 2 * z, 2 * z);
+        ctx.fillRect(dx + lp.rx * z, dy + lp.ly * z + bob + breathe - lo, 2 * z, 2 * z);
+      }
+
+      // Lingua (pet, frente)
+      if (isPetted && facingDown) {
+        ctx.fillStyle = COLORS.dogTongue;
+        ctx.fillRect(dx + 7.5 * z, dy + 16 * z + bob, z, 2 * z);
+      }
+    } else {
+      // Vista lateral (left/right)
+      if (facingLeft) {
+        ctx.translate(dx + TILE_SIZE * z, 0);
+        ctx.scale(-1, 1);
+        ctx.translate(-dx, 0);
+      }
+
+      // Sombra
+      ctx.fillStyle = "rgba(0,0,0,0.1)";
+      ctx.fillRect(dx + 2 * z, dy + 13 * z, 13 * z, 2 * z);
+
+      // Rabo
+      ctx.fillStyle = COLORS.dogBody;
+      const tailAngle = tailPhase * 2 * z;
+      ctx.fillRect(dx, dy + 3 * z + tailAngle + bob, 2 * z, 4 * z);
+      ctx.fillStyle = COLORS.dogBodyDark;
+      ctx.fillRect(dx, dy + 3 * z + tailAngle + bob, z, 4 * z);
+
+      // Corpo
+      ctx.fillStyle = COLORS.dogBody;
+      ctx.fillRect(dx + 2 * z, dy + 5 * z + bob + breathe, 11 * z, 7 * z);
+      ctx.fillRect(dx + 3 * z, dy + 4 * z + bob + breathe, 9 * z, z);
+      ctx.fillStyle = "#d4a84a";
+      ctx.fillRect(dx + 4 * z, dy + 9 * z + bob + breathe, 7 * z, 2 * z);
+      ctx.fillStyle = COLORS.dogBodyDark;
+      ctx.fillRect(dx + 2 * z, dy + 11 * z + bob + breathe, 11 * z, z);
+
+      // Cabeca
+      ctx.fillStyle = COLORS.dogBody;
+      ctx.fillRect(dx + 11 * z, dy + 2 * z + bob, 5 * z, 7 * z);
+      ctx.fillRect(dx + 12 * z, dy + z + bob, 3 * z, z);
+      ctx.fillStyle = "#d4a84a";
+      ctx.fillRect(dx + 13 * z, dy + 6 * z + bob, 3 * z, 2 * z);
+
+      // Orelha
+      ctx.fillStyle = COLORS.dogEar;
+      ctx.fillRect(dx + 14 * z, dy + bob, 2 * z, 4 * z);
+      ctx.fillStyle = COLORS.dogBodyDark;
+      ctx.fillRect(dx + 14 * z, dy + bob, z, 4 * z);
+
+      // Olho
+      ctx.fillStyle = "#1a1a2e";
+      ctx.fillRect(dx + 12 * z, dy + 3.5 * z + bob, 1.5 * z, 1.5 * z);
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(dx + 12 * z, dy + 3.5 * z + bob, z * 0.6, z * 0.6);
+
+      // Nariz
+      ctx.fillStyle = COLORS.dogNose;
+      ctx.fillRect(dx + 15 * z, dy + 5.5 * z + bob, z * 1.2, z);
+
+      // Lingua
+      if (isPetted) {
+        ctx.fillStyle = COLORS.dogTongue;
+        ctx.fillRect(dx + 14 * z, dy + 8 * z + bob, z, 2.5 * z);
+        ctx.fillStyle = "#c0392b";
+        ctx.fillRect(dx + 14 * z, dy + 10 * z + bob, z, z * 0.5);
+      }
+
+      // Patas
+      const patas = [3, 5, 9, 11];
+      for (let i = 0; i < patas.length; i++) {
+        const px = patas[i];
+        const legOff = (i % 2 === 0 ? legPhase : -legPhase);
+        ctx.fillStyle = COLORS.dogBodyDark;
+        ctx.fillRect(dx + px * z, dy + 12 * z + bob + breathe + legOff, 2 * z, 2 * z);
+        ctx.fillStyle = "#d4a84a";
+        ctx.fillRect(dx + px * z, dy + 13 * z + bob + breathe + legOff, 2 * z, z);
+      }
+
+      // Coleira
+      ctx.fillStyle = "#e74c3c";
+      ctx.fillRect(dx + 10 * z, dy + 8 * z + bob, z, 2 * z);
+      ctx.fillStyle = "#f1c40f";
+      ctx.fillRect(dx + 10 * z, dy + 9 * z + bob, z, z);
+    }
 
     // Coracao flutuante quando acariciado
     if (isPetted) {
@@ -902,6 +1062,15 @@ export class Renderer {
       ctx.fillRect(hx + z, heartY + 6 * z, 3 * z, z);
       ctx.fillRect(hx + 2 * z, heartY + 7 * z, z, z);
     }
+
+    ctx.restore();
+
+    // Nome do cachorro acima (fora do save/restore para nao espelhar)
+    ctx.fillStyle = "rgba(255,255,255,0.7)";
+    ctx.font = `${Math.max(4, 4 * z)}px "Press Start 2P", monospace`;
+    ctx.textAlign = "center";
+    ctx.fillText("Rakher", dx + 8 * z, dy - 4 * z);
+    ctx.textAlign = "start";
   }
 
   private renderChatBubble(

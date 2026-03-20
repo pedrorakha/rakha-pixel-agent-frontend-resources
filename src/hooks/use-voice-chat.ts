@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import DailyIframe, { DailyCall, DailyParticipant } from "@daily-co/daily-js";
-import { ROOMS } from "@/lib/constants";
+import { ROOMS, GARDEN, CAFE, STONE_PATH } from "@/lib/constants";
 import { api } from "@/lib/api";
 
 // Som de notificacao via Web Audio API (sem arquivo externo)
@@ -36,16 +36,30 @@ interface VoiceJoinResponse {
 }
 
 /**
- * Detecta em qual room (0-9) o jogador esta baseado na posicao grid.
+ * Detecta em qual room o jogador esta baseado na posicao grid.
+ * Rooms 0-9 sao quartos/meeting. Room 100 = area comunal (garden + stone path + café).
  * Retorna -1 se nao esta em nenhuma room.
  */
+export const COMMUNAL_AREA_ROOM = 100;
+
 export function detectRoom(gridX: number, gridY: number): number {
+  // Quartos e meeting room
   for (let i = 0; i < ROOMS.length; i++) {
     const r = ROOMS[i];
     if (gridX >= r.x && gridX < r.x + r.w && gridY >= r.y && gridY < r.y + r.h) {
       return i;
     }
   }
+
+  // Area comunal: garden + stone path + café compartilham a mesma call
+  if (
+    (gridX >= GARDEN.x && gridX < GARDEN.x + GARDEN.w && gridY >= GARDEN.y && gridY < GARDEN.y + GARDEN.h) ||
+    (gridX === STONE_PATH.x && gridY >= STONE_PATH.y && gridY < STONE_PATH.y + STONE_PATH.h) ||
+    (gridX >= CAFE.x && gridX < CAFE.x + CAFE.w && gridY >= CAFE.y && gridY < CAFE.y + CAFE.h)
+  ) {
+    return COMMUNAL_AREA_ROOM;
+  }
+
   return -1;
 }
 
@@ -242,15 +256,24 @@ export function useVoiceChat({ playerName, gridX, gridY, enabled, playersInSameR
     [playerName, isJoining, leaveCall, updateParticipants, playRemoteAudio, removeRemoteAudio, cleanupAudioElements]
   );
 
-  const toggleMute = useCallback(() => {
-    const newMuted = !isMuted;
-    isMutedRef.current = newMuted;
-    setIsMuted(newMuted);
-    localStorage.setItem("pxa:mic-muted", String(newMuted));
-    if (callRef.current) {
-      callRef.current.setLocalAudio(!newMuted);
-    }
-  }, [isMuted]);
+  // Som de feedback ao mutar/desmutar
+  const playBlup = useCallback(() => {
+    try {
+      const ctx = new AudioContext();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(600, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(400, ctx.currentTime + 0.08);
+      gain.gain.setValueAtTime(0.2, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.1);
+      setTimeout(() => ctx.close(), 200);
+    } catch { /* ignore */ }
+  }, []);
 
   // Aplica volume em todos os audio elements remotos
   const applyVolumeToAll = useCallback((soundOff: boolean) => {
@@ -259,7 +282,26 @@ export function useVoiceChat({ playerName, gridX, gridY, enabled, playersInSameR
     });
   }, []);
 
+  const toggleMute = useCallback(() => {
+    playBlup();
+    const newMuted = !isMuted;
+    isMutedRef.current = newMuted;
+    setIsMuted(newMuted);
+    localStorage.setItem("pxa:mic-muted", String(newMuted));
+    if (callRef.current) {
+      callRef.current.setLocalAudio(!newMuted);
+    }
+    // Desmutar mic tambem desmuta o sound se ambos estavam mutados
+    if (!newMuted && isSoundOff) {
+      isSoundOffRef.current = false;
+      setIsSoundOff(false);
+      localStorage.setItem("pxa:sound-off", "false");
+      applyVolumeToAll(false);
+    }
+  }, [isMuted, isSoundOff, applyVolumeToAll, playBlup]);
+
   const toggleSound = useCallback(() => {
+    playBlup();
     const newSoundOff = !isSoundOff;
     isSoundOffRef.current = newSoundOff;
     setIsSoundOff(newSoundOff);
@@ -274,7 +316,7 @@ export function useVoiceChat({ playerName, gridX, gridY, enabled, playersInSameR
         callRef.current.setLocalAudio(false);
       }
     }
-  }, [isSoundOff, isMuted, applyVolumeToAll]);
+  }, [isSoundOff, isMuted, applyVolumeToAll, playBlup]);
 
   // Mutar/desmutar um participante remoto localmente
   const toggleMuteParticipant = useCallback((sessionId: string) => {

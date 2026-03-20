@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useCanvas } from "@/hooks/use-canvas";
 import { useGameLoop } from "@/hooks/use-game-loop";
 import { useOfficeStore } from "@/stores/office-store";
@@ -40,7 +41,9 @@ import {
   ROOMS,
   MEETING_ROOM_INDEX,
   ROOM_DOORS,
-  DOG_INTERACT_TILES,
+  DOG_POSITION,
+  GARDEN,
+  STATIC_BLOCKED_TILES,
 } from "@/lib/constants";
 
 interface ApiMember {
@@ -166,7 +169,13 @@ const INTERACT_SOUNDS: Record<string, () => void> = {
   high_five: playHighFiveSound,
 };
 
-export function OfficeCanvas() {
+interface OfficeCanvasProps {
+  sidebarOpen: boolean;
+  onToggleSidebar: () => void;
+  onOpenVisualEditor: () => void;
+}
+
+export function OfficeCanvas({ sidebarOpen, onToggleSidebar, onOpenVisualEditor }: OfficeCanvasProps) {
   const { canvasRef, ctx, size } = useCanvas();
   const {
     layout,
@@ -195,16 +204,33 @@ export function OfficeCanvas() {
   const addFootprint = useFootprintStore((s) => s.addFootprint);
   const updateFootprints = useFootprintStore((s) => s.updateFootprints);
   const isSpectator = usePlayerStore((s) => s.isSpectator);
+  const clearSelectedMember = usePlayerStore((s) => s.clearSelectedMember);
 
   const [characters, setCharacters] = useState<Character[]>([]);
   const [presenceMap, setPresenceMap] = useState<Map<string, DiscordStatus>>(new Map());
   const [chatInput, setChatInput] = useState("");
   const [chatFocused, setChatFocused] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [charMenu, setCharMenu] = useState<{ screenX: number; screenY: number } | null>(null);
   const [interactMenu, setInteractMenu] = useState<{ screenX: number; screenY: number; targetId: string; targetName: string } | null>(null);
   const [lockedDoors, setLockedDoors] = useState<Set<number>>(new Set());
   const dogPetFrameRef = useRef(-1);
+
+  // Estado dinâmico do cachorro (anda pelo garden, senta, repete)
+  const dogRef = useRef({
+    x: DOG_POSITION.x,
+    y: DOG_POSITION.y,
+    state: "sitting" as "walking" | "sitting",
+    direction: "right" as "left" | "right" | "up" | "down",
+    timer: 0,
+    walkDuration: 3,   // segundos andando
+    sitDuration: 4,    // segundos sentado
+    moveTimer: 0,
+    moveInterval: 0.4, // segundos entre cada tile ao andar
+    targetX: DOG_POSITION.x,
+    targetY: DOG_POSITION.y,
+  });
 
   const chatInputRef = useRef<HTMLInputElement>(null);
   const historyEndRef = useRef<HTMLDivElement>(null);
@@ -454,9 +480,9 @@ export function OfficeCanvas() {
   const isNearAnyDoor = nearDoorRoomIndex >= 0;
   const isNearRoomLocked = isNearAnyDoor && lockedDoors.has(nearDoorRoomIndex);
   const isNearDog = currentPlayerChar
-    ? DOG_INTERACT_TILES.some(
-        (t) => t.x === currentPlayerChar.gridX && t.y === currentPlayerChar.gridY
-      )
+    ? Math.abs(currentPlayerChar.gridX - dogRef.current.x) <= 1 &&
+      Math.abs(currentPlayerChar.gridY - dogRef.current.y) <= 1 &&
+      !(currentPlayerChar.gridX === dogRef.current.x && currentPlayerChar.gridY === dogRef.current.y)
     : false;
   const playersInSameRoom = myRoom >= 0
     ? characters.filter((c) => {
@@ -579,11 +605,11 @@ export function OfficeCanvas() {
           return;
         }
 
-        // Verifica se esta adjacente ao cachorro
-        const isNearDog = DOG_INTERACT_TILES.some(
-          (t) => t.x === char.gridX && t.y === char.gridY
-        );
-        if (isNearDog && dogPetFrameRef.current < 0) {
+        // Verifica se esta adjacente ao cachorro (posicao dinamica)
+        const dogNear = Math.abs(char.gridX - dogRef.current.x) <= 1 &&
+          Math.abs(char.gridY - dogRef.current.y) <= 1 &&
+          !(char.gridX === dogRef.current.x && char.gridY === dogRef.current.y);
+        if (dogNear && dogPetFrameRef.current < 0) {
           dogPetFrameRef.current = 0;
           return;
         }
@@ -655,16 +681,16 @@ export function OfficeCanvas() {
         const newPresenceMap = new Map<string, DiscordStatus>();
 
         const deskToRoom = new Map<string, number>();
-        for (const apiDesk of (apiDesks ?? [])) {
+        deskMap.forEach((apiDesk, deskId) => {
           for (let ri = 0; ri < ROOMS.length; ri++) {
             const room = ROOMS[ri];
             if (apiDesk.grid_x >= room.x && apiDesk.grid_x < room.x + room.w &&
                 apiDesk.grid_y >= room.y && apiDesk.grid_y < room.y + room.h) {
-              deskToRoom.set(apiDesk.id, ri);
+              deskToRoom.set(deskId, ri);
               break;
             }
           }
-        }
+        });
 
         let coffeeIndex = 0;
         let bedIndex = 0;
@@ -901,11 +927,76 @@ export function OfficeCanvas() {
       updateReactions(deltaTime);
       updateFootprints();
 
-      // Atualiza animacao do cachorro
+      // Atualiza animacao do cachorro (pet)
       if (dogPetFrameRef.current >= 0) {
         dogPetFrameRef.current += 1;
         if (dogPetFrameRef.current >= 60) {
           dogPetFrameRef.current = -1;
+        }
+      }
+
+      // Atualiza movimento do cachorro (anda pelo garden, senta, repete)
+      const dog = dogRef.current;
+      dog.timer += deltaTime;
+
+      // Tiles bloqueadas do garden (arvores, cerca, etc)
+      const isDogBlocked = (tx: number, ty: number) =>
+        STATIC_BLOCKED_TILES.some((t) => t.x === tx && t.y === ty) ||
+        tx < GARDEN.x || tx >= GARDEN.x + GARDEN.w ||
+        ty < GARDEN.y || ty >= GARDEN.y + GARDEN.h;
+
+      if (dog.state === "sitting") {
+        if (dog.timer >= dog.sitDuration) {
+          dog.state = "walking";
+          dog.timer = 0;
+          dog.walkDuration = 2 + Math.random() * 3;
+          // Escolhe destino aleatorio valido dentro do garden
+          for (let attempt = 0; attempt < 20; attempt++) {
+            const tx = GARDEN.x + 1 + Math.floor(Math.random() * (GARDEN.w - 2));
+            const ty = GARDEN.y + 2 + Math.floor(Math.random() * (GARDEN.h - 3));
+            if (!isDogBlocked(tx, ty)) {
+              dog.targetX = tx;
+              dog.targetY = ty;
+              break;
+            }
+          }
+        }
+      } else {
+        dog.moveTimer += deltaTime;
+        if (dog.moveTimer >= dog.moveInterval) {
+          dog.moveTimer = 0;
+          const ddx = dog.targetX - dog.x;
+          const ddy = dog.targetY - dog.y;
+          if (ddx === 0 && ddy === 0) {
+            dog.state = "sitting";
+            dog.timer = 0;
+            dog.sitDuration = 3 + Math.random() * 4;
+          } else {
+            let nx = dog.x;
+            let ny = dog.y;
+            if (Math.abs(ddx) >= Math.abs(ddy)) {
+              nx += ddx > 0 ? 1 : -1;
+              dog.direction = ddx > 0 ? "right" : "left";
+            } else {
+              ny += ddy > 0 ? 1 : -1;
+              dog.direction = ddy > 0 ? "down" : "up";
+            }
+            // So move se a proxima tile nao esta bloqueada
+            if (!isDogBlocked(nx, ny)) {
+              dog.x = nx;
+              dog.y = ny;
+            } else {
+              // Bloqueado, senta e tenta outro destino no proximo ciclo
+              dog.state = "sitting";
+              dog.timer = 0;
+              dog.sitDuration = 1 + Math.random() * 2;
+            }
+          }
+        }
+        if (dog.timer >= dog.walkDuration) {
+          dog.state = "sitting";
+          dog.timer = 0;
+          dog.sitDuration = 3 + Math.random() * 4;
         }
       }
 
@@ -994,7 +1085,8 @@ export function OfficeCanvas() {
         footprintsRef.current,
         lockedDoorsRef.current,
         nearDoorRoom,
-        dogPetFrameRef.current
+        dogPetFrameRef.current,
+        { x: dogRef.current.x, y: dogRef.current.y, state: dogRef.current.state, direction: dogRef.current.direction }
       );
     },
     [ctx, cameraX, cameraY, zoom, size, storeDesks, presences, presenceMap]
@@ -1264,124 +1356,50 @@ export function OfficeCanvas() {
         </>
       )}
 
-      {/* Zoom controls */}
-      <div className="absolute bottom-6 right-6 flex flex-col gap-2 z-20">
-        <button
-          onClick={zoomIn}
-          className="w-10 h-10 bg-pixel-surface border-2 border-pixel-panel text-pixel-text font-pixel text-base flex items-center justify-center hover:bg-pixel-panel transition-colors"
-          aria-label="Zoom in"
-        >
-          +
-        </button>
-        <span className="w-10 h-10 bg-pixel-surface/80 border-2 border-pixel-panel text-pixel-text font-pixel text-[11px] flex items-center justify-center">
-          {zoom}x
-        </span>
-        <button
-          onClick={zoomOut}
-          className="w-10 h-10 bg-pixel-surface border-2 border-pixel-panel text-pixel-text font-pixel text-base flex items-center justify-center hover:bg-pixel-panel transition-colors"
-          aria-label="Zoom out"
-        >
-          -
-        </button>
+      {/* Zoom controls — top right */}
+      <div className="absolute top-4 right-6 flex flex-col gap-2 z-20">
+        <button onClick={zoomIn} className="w-10 h-10 bg-pixel-surface border-2 border-pixel-panel text-pixel-text font-pixel text-base flex items-center justify-center hover:bg-pixel-panel transition-colors" aria-label="Zoom in">+</button>
+        <span className="w-10 h-10 bg-pixel-surface/80 border-2 border-pixel-panel text-pixel-text font-pixel text-[11px] flex items-center justify-center">{zoom}x</span>
+        <button onClick={zoomOut} className="w-10 h-10 bg-pixel-surface border-2 border-pixel-panel text-pixel-text font-pixel text-base flex items-center justify-center hover:bg-pixel-panel transition-colors" aria-label="Zoom out">-</button>
       </div>
 
-      {/* Connection status + Voice */}
-      <div className="absolute top-14 left-6 z-20 flex flex-col gap-2">
+      {/* Top-left indicators */}
+      <div className="absolute top-4 left-6 z-20 flex flex-col gap-2">
         <div className="flex items-center gap-2 bg-pixel-surface/80 border-2 border-pixel-panel px-4 py-1.5">
           <span className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pixel-blink" />
           <span className="font-pixel text-[10px] text-pixel-muted">LIVE</span>
         </div>
-
-        {/* Voice chat indicator */}
         {(isInCall || voiceJoining) && (
           <div className="flex items-center gap-2 bg-pixel-surface/90 border-2 border-pixel-panel px-4 py-1.5">
             <span className={`w-2.5 h-2.5 rounded-full ${voiceJoining ? "bg-yellow-500 animate-pulse" : "bg-green-500"}`} />
-            <span className="font-pixel text-[9px] text-pixel-muted">
-              {voiceJoining ? "CONNECTING..." : `VOICE: ${voiceRoomLabel}`}
-            </span>
-            {isInCall && participantCount > 1 && (
-              <span className="font-pixel text-[8px] text-pixel-accent">
-                ({participantCount})
-              </span>
-            )}
+            <span className="font-pixel text-[9px] text-pixel-muted">{voiceJoining ? "CONNECTING..." : `VOICE: ${voiceRoomLabel}`}</span>
+            {isInCall && participantCount > 1 && <span className="font-pixel text-[8px] text-pixel-accent">({participantCount})</span>}
           </div>
         )}
-        {/* Mic toggle — visivel sempre que esta num quarto (mesmo sem call ativa) */}
-        {!isSpectator && selectedMemberId && myRoom >= 0 && (
-          <button
-            onClick={toggleMute}
-            className={`flex items-center gap-2 px-4 py-1.5 border-2 transition-colors ${
-              isMuted
-                ? "bg-red-900/50 border-red-600/50 hover:border-red-500"
-                : "bg-pixel-surface/90 border-pixel-panel hover:border-pixel-accent"
-            }`}
-          >
-            <span className="font-pixel text-[9px] text-pixel-text">
-              {isMuted ? "🔇 MIC OFF" : "🎙️ MIC ON"}
-            </span>
-          </button>
-        )}
-        {/* Sound toggle — visivel sempre que esta num quarto */}
-        {!isSpectator && selectedMemberId && myRoom >= 0 && (
-          <button
-            onClick={toggleSound}
-            className={`flex items-center gap-2 px-4 py-1.5 border-2 transition-colors ${
-              isSoundOff
-                ? "bg-red-900/50 border-red-600/50 hover:border-red-500"
-                : "bg-pixel-surface/90 border-pixel-panel hover:border-pixel-accent"
-            }`}
-          >
-            <span className="font-pixel text-[9px] text-pixel-text">
-              {isSoundOff ? "🔇 SOUND OFF" : "🔊 SOUND ON"}
-            </span>
-          </button>
-        )}
-        {/* Lista de participantes na call */}
         {isInCall && voiceParticipants.length > 0 && (
           <div className="bg-pixel-surface/90 border-2 border-pixel-panel px-3 py-2 flex flex-col gap-1 max-w-[180px]">
             {voiceParticipants.map((p) => (
               <div key={p.sessionId} className="flex items-center gap-2">
                 {p.isLocal ? (
-                  <span className="font-pixel text-[8px] text-pixel-accent">
-                    {isMuted ? "🔇" : "🎙️"}
-                  </span>
+                  <span className="font-pixel text-[8px] text-pixel-accent">{isMuted ? "🔇" : "🎙️"}</span>
                 ) : (
-                  <button
-                    onClick={() => toggleMuteParticipant(p.sessionId)}
-                    className="font-pixel text-[8px] hover:opacity-70 transition-opacity"
-                    title={p.isMutedByMe ? `Desmutar ${p.userName}` : `Mutar ${p.userName}`}
-                  >
-                    {p.isMutedByMe ? "🔇" : "🎙️"}
-                  </button>
+                  <button onClick={() => toggleMuteParticipant(p.sessionId)} className="font-pixel text-[8px] hover:opacity-70 transition-opacity" title={p.isMutedByMe ? `Desmutar ${p.userName}` : `Mutar ${p.userName}`}>{p.isMutedByMe ? "🔇" : "🎙️"}</button>
                 )}
-                <span className={`font-pixel text-[8px] truncate ${
-                  p.isLocal ? "text-pixel-accent" : p.isMutedByMe ? "text-red-400/60" : "text-pixel-text"
-                }`}>
-                  {p.userName}{p.isLocal ? " (you)" : ""}
-                </span>
+                <span className={`font-pixel text-[8px] truncate ${p.isLocal ? "text-pixel-accent" : p.isMutedByMe ? "text-red-400/60" : "text-pixel-text"}`}>{p.userName}{p.isLocal ? " (you)" : ""}</span>
               </div>
             ))}
           </div>
         )}
-        {/* Door lock hint (qualquer room) */}
         {isNearAnyDoor && (
-          <div className={`flex items-center gap-2 px-4 py-1.5 border-2 ${
-            isNearRoomLocked
-              ? "bg-red-900/50 border-red-600/50"
-              : "bg-pixel-surface/90 border-pixel-panel"
-          }`}>
-            <span className="font-pixel text-[9px] text-pixel-text">
-              {isNearRoomLocked ? "🔒 [SPACE] UNLOCK" : "🔓 [SPACE] LOCK"}
-            </span>
+          <div className={`flex items-center gap-2 px-4 py-1.5 border-2 ${isNearRoomLocked ? "bg-red-900/50 border-red-600/50" : "bg-pixel-surface/90 border-pixel-panel"}`}>
+            <span className="font-pixel text-[9px] text-pixel-text">{isNearRoomLocked ? "🔒 [SPACE] UNLOCK" : "🔓 [SPACE] LOCK"}</span>
           </div>
         )}
-        {/* Room locked indicator (visivel pra quem esta dentro de uma room trancada) */}
         {!isNearAnyDoor && myRoom >= 0 && lockedDoors.has(myRoom) && (
           <div className="flex items-center gap-2 bg-red-900/50 border-2 border-red-600/50 px-4 py-1.5">
             <span className="font-pixel text-[9px] text-pixel-text">🔒 ROOM LOCKED</span>
           </div>
         )}
-        {/* Dog pet hint */}
         {isNearDog && (
           <div className="flex items-center gap-2 bg-pixel-surface/90 border-2 border-pixel-panel px-4 py-1.5">
             <span className="font-pixel text-[9px] text-pixel-text">🐕 [SPACE] PET</span>
@@ -1389,42 +1407,15 @@ export function OfficeCanvas() {
         )}
       </div>
 
-      {/* Chat input — centro horizontal (oculto no modo espectador) */}
-      {!isSpectator && selectedMemberId && <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 w-full max-w-md px-6">
-        <form onSubmit={handleChatSubmit} className="flex gap-2">
-          <input
-            ref={chatInputRef}
-            type="text"
-            value={chatInput}
-            onChange={(e) => setChatInput(e.target.value)}
-            onFocus={() => setChatFocused(true)}
-            onBlur={() => setChatFocused(false)}
-            placeholder="Pressione Enter para falar..."
-            maxLength={200}
-            className="flex-1 px-4 py-2 font-pixel text-[10px] bg-pixel-surface/90 text-pixel-text border-2 border-pixel-panel focus:border-pixel-accent focus:outline-none placeholder:text-pixel-muted/40"
-          />
-          <button
-            type="submit"
-            disabled={!chatInput.trim()}
-            className="px-4 py-2 font-pixel text-[10px] bg-pixel-accent text-white border-2 border-pixel-accent/60 hover:bg-pixel-accent/80 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-          >
-            SEND
-          </button>
-        </form>
-      </div>}
-
-      {/* Painel esquerdo — historico + keybindings + (jukebox abaixo em z-50) */}
-      <div className="absolute bottom-20 left-6 z-20 flex flex-col gap-2 w-[260px]">
-        {/* Historico de chat (expandido) */}
-        {historyOpen && (
+      {/* Chat history — above bottom bar, acima da jukebox */}
+      {historyOpen && (
+        <div className="absolute bottom-28 left-4 z-25 w-[280px]">
           <div className="bg-pixel-surface/95 border-2 border-pixel-panel max-h-[240px] overflow-y-auto">
             <div className="px-4 py-2.5 border-b border-pixel-panel/50 sticky top-0 bg-pixel-surface">
               <span className="font-pixel text-[9px] text-pixel-muted uppercase">Chat</span>
             </div>
             {chatHistory.length === 0 ? (
-              <div className="px-4 py-4">
-                <span className="font-pixel text-[8px] text-pixel-muted">Nenhuma mensagem ainda</span>
-              </div>
+              <div className="px-4 py-4"><span className="font-pixel text-[8px] text-pixel-muted">Nenhuma mensagem ainda</span></div>
             ) : (
               <div className="px-4 py-2">
                 {chatHistory.map((entry) => (
@@ -1437,50 +1428,93 @@ export function OfficeCanvas() {
               </div>
             )}
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Botao historico */}
-        <button
-          onClick={() => setHistoryOpen((v) => !v)}
-          className="w-full px-4 py-2 font-pixel text-[9px] bg-pixel-surface/80 text-pixel-muted border-2 border-pixel-panel hover:border-pixel-accent hover:text-pixel-accent transition-colors text-left"
-        >
-          {historyOpen ? "[X] FECHAR CHAT" : `[CHAT] ${chatHistory.length > 0 ? `(${chatHistory.length})` : ""}`}
-        </button>
-
-        {/* Quick reactions */}
-        {!isSpectator && selectedMemberId && (
-          <div className="flex gap-1 bg-pixel-surface/80 border-2 border-pixel-panel px-3 py-2">
-            {["❤️", "👍", "😂", "👏", "🔥", "👀"].map((emoji) => (
-              <button
-                key={emoji}
-                onClick={() => emitReaction(emoji)}
-                className="w-8 h-8 flex items-center justify-center hover:bg-pixel-accent/20 transition-colors text-sm"
-              >
-                {emoji}
-              </button>
-            ))}
+      {/* ========== BOTTOM BAR ========== */}
+      <div className="absolute bottom-0 left-0 right-0 z-30 bg-pixel-surface/95 border-t-2 border-pixel-panel">
+        <div className="flex items-center justify-center gap-3 px-4 py-2">
+          {/* LEFT: mic, sound, chat toggle, reactions */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            {!isSpectator && selectedMemberId && myRoom >= 0 && (
+              <>
+                <button onClick={toggleMute} className={`flex items-center justify-center w-8 h-8 border-2 transition-colors ${isMuted ? "bg-red-900/50 border-red-600/50 hover:border-red-500" : "bg-pixel-panel/50 border-pixel-panel hover:border-pixel-accent"}`} title={isMuted ? "MIC OFF" : "MIC ON"}>
+                  <span className="text-sm">{isMuted ? "🔇" : "🎙️"}</span>
+                </button>
+                <button onClick={toggleSound} className={`flex items-center justify-center w-8 h-8 border-2 transition-colors ${isSoundOff ? "bg-red-900/50 border-red-600/50 hover:border-red-500" : "bg-pixel-panel/50 border-pixel-panel hover:border-pixel-accent"}`} title={isSoundOff ? "SOUND OFF" : "SOUND ON"}>
+                  <span className="text-sm">{isSoundOff ? "🔇" : "🔊"}</span>
+                </button>
+              </>
+            )}
+            <button onClick={() => setHistoryOpen((v) => !v)} className={`flex items-center justify-center w-8 h-8 border-2 transition-colors ${historyOpen ? "bg-pixel-accent/20 border-pixel-accent" : "bg-pixel-panel/50 border-pixel-panel hover:border-pixel-accent"}`} title="Chat">
+              <span className="text-sm">💬</span>
+            </button>
+            <div className="w-px h-6 bg-pixel-panel/50 mx-0.5" />
+            {!isSpectator && selectedMemberId && (
+              <div className="flex gap-0.5">
+                {["❤️", "👍", "😂", "👏", "🔥", "👀"].map((emoji) => (
+                  <button key={emoji} onClick={() => emitReaction(emoji)} className="w-7 h-7 flex items-center justify-center hover:bg-pixel-accent/20 transition-colors text-sm">{emoji}</button>
+                ))}
+              </div>
+            )}
           </div>
-        )}
 
-        {/* Keybindings */}
-        <div className="bg-pixel-surface/80 border-2 border-pixel-panel px-4 py-2.5">
-          <div className="flex flex-col gap-1.5">
-            <div className="flex items-center gap-3">
-              <span className="font-pixel text-[8px] text-pixel-accent min-w-[70px]">WASD / Setas</span>
-              <span className="font-pixel text-[8px] text-pixel-muted">Mover</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="font-pixel text-[8px] text-pixel-accent min-w-[70px]">Click</span>
-              <span className="font-pixel text-[8px] text-pixel-muted">Andar ate</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="font-pixel text-[8px] text-pixel-accent min-w-[70px]">Espaco</span>
-              <span className="font-pixel text-[8px] text-pixel-muted">Pular</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="font-pixel text-[8px] text-pixel-accent min-w-[70px]">Enter</span>
-              <span className="font-pixel text-[8px] text-pixel-muted">Chat</span>
-            </div>
+          {/* CENTER: chat input */}
+          {!isSpectator && selectedMemberId ? (
+            <form onSubmit={handleChatSubmit} className="flex gap-2 w-full max-w-[360px] shrink">
+              <input ref={chatInputRef} type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)} onFocus={() => setChatFocused(true)} onBlur={() => setChatFocused(false)} placeholder="Enter para falar..." maxLength={200} className="flex-1 min-w-0 px-3 py-1.5 font-pixel text-[10px] bg-pixel-bg/60 text-pixel-text border-2 border-pixel-panel focus:border-pixel-accent focus:outline-none placeholder:text-pixel-muted/40" />
+              <button type="submit" disabled={!chatInput.trim()} className="px-3 py-1.5 font-pixel text-[9px] bg-pixel-accent text-white border-2 border-pixel-accent/60 hover:bg-pixel-accent/80 disabled:opacity-30 disabled:cursor-not-allowed transition-colors shrink-0">SEND</button>
+            </form>
+          ) : (
+            <div className="w-[360px] shrink" />
+          )}
+
+          {/* RIGHT: visual editor + settings */}
+          <div className="flex items-center gap-1.5 shrink-0">
+          {!isSpectator && selectedMemberId && (
+            <button
+              onClick={onOpenVisualEditor}
+              className="flex items-center justify-center w-8 h-8 border-2 bg-pixel-panel/50 border-pixel-panel hover:border-pixel-accent transition-colors"
+              title="Personalizar visual"
+            >
+              <span className="text-sm">👕</span>
+            </button>
+          )}
+          <div className="relative">
+            <button
+              onClick={() => setSettingsOpen((v) => !v)}
+              className={`flex items-center justify-center w-8 h-8 border-2 transition-colors ${settingsOpen ? "bg-pixel-accent/20 border-pixel-accent" : "bg-pixel-panel/50 border-pixel-panel hover:border-pixel-accent"}`}
+              title="Configurações"
+            >
+              <span className="text-sm">⚙️</span>
+            </button>
+            {settingsOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setSettingsOpen(false)} />
+                <div className="absolute bottom-full right-0 mb-2 z-50 bg-pixel-surface border-2 border-pixel-panel shadow-[4px_4px_0px_0px_rgba(0,0,0,0.5)] min-w-[180px]">
+                  <div className="px-4 py-2.5 border-b border-pixel-panel/50">
+                    <span className="font-pixel text-[10px] text-pixel-accent">RAKHA AGENT</span>
+                  </div>
+                  {selectedMemberName && (
+                    <button onClick={() => { clearSelectedMember(); setSettingsOpen(false); }} className="w-full px-4 py-2 font-pixel text-[9px] text-pixel-text hover:bg-pixel-panel/50 text-left transition-colors">
+                      Trocar personagem ({selectedMemberName})
+                    </button>
+                  )}
+                  {isSpectator && (
+                    <button onClick={() => { clearSelectedMember(); setSettingsOpen(false); }} className="w-full px-4 py-2 font-pixel text-[9px] text-pixel-muted hover:bg-pixel-panel/50 text-left transition-colors">
+                      Selecionar personagem
+                    </button>
+                  )}
+                  <button onClick={() => { onToggleSidebar(); setSettingsOpen(false); }} className="w-full px-4 py-2 font-pixel text-[9px] text-pixel-text hover:bg-pixel-panel/50 text-left transition-colors">
+                    {sidebarOpen ? "Fechar membros" : `Membros (${characters.length})`}
+                  </button>
+                  <Link href="/dashboard" onClick={() => setSettingsOpen(false)} className="block w-full px-4 py-2 font-pixel text-[9px] text-pixel-text hover:bg-pixel-panel/50 text-left transition-colors">
+                    Dashboard
+                  </Link>
+                </div>
+              </>
+            )}
+          </div>
           </div>
         </div>
       </div>

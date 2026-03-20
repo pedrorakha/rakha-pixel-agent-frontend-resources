@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import Link from "next/link";
 import { OfficeCanvas } from "@/components/canvas/office-canvas";
 import { Badge } from "@/components/ui/badge";
 import { Loading } from "@/components/ui/loading";
@@ -146,52 +145,7 @@ export default function OfficePage() {
           <MusicPlayer />
 
           {/* Canvas — always full screen */}
-          <OfficeCanvas />
-
-          {/* Header bar — always on top */}
-          <div className="absolute top-0 left-0 right-0 z-30 flex items-center justify-between px-4 sm:px-6 py-3 bg-pixel-surface/90 border-b-2 border-pixel-panel">
-            <div className="flex items-center gap-3 sm:gap-4">
-              <h1 className="font-pixel text-[11px] sm:text-[13px] text-pixel-accent">
-                RAKHA AGENT
-              </h1>
-              <Link
-                href="/dashboard"
-                className="font-pixel text-[9px] sm:text-[10px] text-pixel-muted hover:text-pixel-accent transition-colors"
-              >
-                [DASHBOARD]
-              </Link>
-            </div>
-            <div className="flex items-center gap-3 sm:gap-4">
-              {/* Indicador do player logado */}
-              {selectedMemberName && (
-                <button
-                  onClick={clearSelectedMember}
-                  className="font-pixel text-[9px] sm:text-[10px] text-pixel-accent hover:text-pixel-text transition-colors"
-                  title="Clique para trocar de personagem"
-                >
-                  [{selectedMemberName}]
-                </button>
-              )}
-              {isSpectator && (
-                <button
-                  onClick={clearSelectedMember}
-                  className="font-pixel text-[9px] sm:text-[10px] text-pixel-muted hover:text-pixel-text transition-colors"
-                  title="Clique para selecionar um personagem"
-                >
-                  [ESPECTADOR]
-                </button>
-              )}
-              <span className="font-pixel text-[9px] sm:text-[10px] text-pixel-muted hidden sm:inline">
-                {members.length} members
-              </span>
-              <button
-                onClick={() => setSidebarOpen(!sidebarOpen)}
-                className="font-pixel text-[10px] sm:text-[11px] text-pixel-text hover:text-pixel-accent transition-colors"
-              >
-                {sidebarOpen ? "[HIDE]" : "[MEMBERS]"}
-              </button>
-            </div>
-          </div>
+          <OfficeCanvas sidebarOpen={sidebarOpen} onToggleSidebar={() => setSidebarOpen(!sidebarOpen)} onOpenVisualEditor={() => setShowVisualEditor(true)} />
 
           {/* Sidebar overlay */}
           {sidebarOpen && (

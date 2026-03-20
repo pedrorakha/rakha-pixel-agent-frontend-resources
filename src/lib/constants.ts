@@ -42,6 +42,9 @@ export const COLORS = {
   treeLeaf: "#228b22",
   treeLeafDark: "#1a6b1a",
   fence: "#8b7355",
+  // Stone path
+  stone: "#6b6b80",
+  stoneAlt: "#5e5e72",
   // Dog
   dogBody: "#c4913b",
   dogBodyDark: "#a07830",
@@ -132,11 +135,11 @@ export const ANIMATION_SPEEDS: Record<CharacterState, number> = {
 // ============================================================
 // OFFICE LAYOUT — 53 x 36 grid
 //
-// Left side (3x3 grid): 9 personal rooms
-// Right side top: Meeting Room (2 lockable doors: left + bottom)
-// Right side middle: Café (communal area)
-// Right side bottom: Garden (open area, no walls)
+// Row 1: Room1, Room2, Room3, Meeting Room
+// Row 2: Room4, Garden (open), Café (open), Room5
+// Row 3: Room6, Room7, Room8, Room9
 //
+// Garden e Café ficam no centro, sem paredes (áreas abertas)
 // Tile IDs: 0=empty, 1=wall, 4/5=hall, 6/7=room, 8/9=grass
 // ============================================================
 
@@ -148,28 +151,27 @@ interface RoomDef {
   label: string;
 }
 
-// 9 personal rooms (3x3) + meeting room + café
+// 9 personal rooms + meeting room (café é área aberta, fora do ROOMS)
+// Layout: quartos ao redor, garden + café no centro
+// Room5 e Room9 encostados na borda direita (x:42, w:9 → right wall alinha com Meeting Room)
 export const ROOMS: RoomDef[] = [
   // Row 1 (top)
   { x: 2,  y: 2,  w: 9, h: 8, label: "Room 1" },
   { x: 14, y: 2,  w: 9, h: 8, label: "Room 2" },
   { x: 26, y: 2,  w: 9, h: 8, label: "Room 3" },
-  // Row 2 (middle)
+  // Row 2 (sides — centro é garden + café)
   { x: 2,  y: 14, w: 9, h: 8, label: "Room 4" },
-  { x: 14, y: 14, w: 9, h: 8, label: "Room 5" },
-  { x: 26, y: 14, w: 9, h: 8, label: "Room 6" },
+  { x: 42, y: 14, w: 9, h: 8, label: "Room 5" },
   // Row 3 (bottom)
-  { x: 2,  y: 26, w: 9, h: 8, label: "Room 7" },
-  { x: 14, y: 26, w: 9, h: 8, label: "Room 8" },
-  { x: 26, y: 26, w: 9, h: 8, label: "Room 9" },
-  // Meeting room (right side, aligned with row 1)
+  { x: 2,  y: 26, w: 9, h: 8, label: "Room 6" },
+  { x: 14, y: 26, w: 9, h: 8, label: "Room 7" },
+  { x: 26, y: 26, w: 9, h: 8, label: "Room 8" },
+  { x: 42, y: 26, w: 9, h: 8, label: "Room 9" },
+  // Meeting room (top right, maior)
   { x: 38, y: 2, w: 13, h: 8, label: "Meeting Room" },
-  // Café (right side, aligned with row 2)
-  { x: 38, y: 14, w: 13, h: 8, label: "Café" },
 ];
 
 export const MEETING_ROOM_INDEX = 9;
-export const CAFE_ROOM_INDEX = 10;
 
 // Gera tiles de porta e triggers internos para qualquer room
 interface RoomDoorDef {
@@ -206,20 +208,32 @@ function buildRoomDoors(room: RoomDef): RoomDoorDef {
     { x: doorX + 1, y: room.y },
   );
 
-  // Meeting room + Café: porta esquerda extra
-  if (room.label === "Meeting Room" || room.label === "Café") {
-    const doorY = room.y + Math.floor(room.h / 2);
-    tiles.push(
-      { x: room.x - 1, y: doorY - 1 },
-      { x: room.x - 1, y: doorY },
-      { x: room.x - 1, y: doorY + 1 },
-    );
-    insideTrigger.push(
-      { x: room.x, y: doorY - 1 },
-      { x: room.x, y: doorY },
-      { x: room.x, y: doorY + 1 },
-    );
-  }
+  // Portas laterais (esquerda e direita) para todas as rooms
+  const doorY = room.y + Math.floor(room.h / 2);
+
+  // Porta esquerda
+  tiles.push(
+    { x: room.x - 1, y: doorY - 1 },
+    { x: room.x - 1, y: doorY },
+    { x: room.x - 1, y: doorY + 1 },
+  );
+  insideTrigger.push(
+    { x: room.x, y: doorY - 1 },
+    { x: room.x, y: doorY },
+    { x: room.x, y: doorY + 1 },
+  );
+
+  // Porta direita
+  tiles.push(
+    { x: room.x + room.w, y: doorY - 1 },
+    { x: room.x + room.w, y: doorY },
+    { x: room.x + room.w, y: doorY + 1 },
+  );
+  insideTrigger.push(
+    { x: room.x + room.w - 1, y: doorY - 1 },
+    { x: room.x + room.w - 1, y: doorY },
+    { x: room.x + room.w - 1, y: doorY + 1 },
+  );
 
   return { tiles, insideTrigger };
 }
@@ -230,23 +244,46 @@ export const ROOM_DOORS: RoomDoorDef[] = ROOMS.map(buildRoomDoors);
 // Atalho legado (meeting room = index 9)
 export const MEETING_DOOR = ROOM_DOORS[MEETING_ROOM_INDEX];
 
-// Jardim (area aberta sem paredes, abaixo do café)
+// Jardim (area aberta sem paredes, centro-esquerdo do mapa)
 export const GARDEN = {
-  x: 38,
-  y: 24,
-  w: 13,
+  x: 14,
+  y: 13,
+  w: 12,
+  h: 10,
+};
+
+// Coluna de pedra separando garden e café (1 tile de largura)
+export const STONE_PATH = {
+  x: 26,
+  y: 13,
+  h: 10,
+};
+
+// Café (area aberta sem paredes, centro-direito do mapa)
+export const CAFE = {
+  x: 27,
+  y: 13,
+  w: 12,
   h: 10,
 };
 
 // Cachorrinho interativo no jardim
-export const DOG_POSITION = { x: 44, y: 28 };
+export const DOG_POSITION = { x: 20, y: 18 };
 // Tiles adjacentes ao cachorro onde o jogador pode interagir
 export const DOG_INTERACT_TILES = [
-  { x: 43, y: 28 },
-  { x: 45, y: 28 },
-  { x: 44, y: 27 },
-  { x: 44, y: 29 },
+  { x: 19, y: 18 },
+  { x: 21, y: 18 },
+  { x: 20, y: 17 },
+  { x: 20, y: 19 },
 ];
+
+// Lounge entre Room 8 e Room 9 (3 tiles centrais do gap de 5)
+export const LOUNGE = {
+  x: 37,
+  y: 26,
+  w: 3,
+  h: 8,
+};
 
 const W = GRID_WIDTH;
 const H = GRID_HEIGHT;
@@ -306,27 +343,41 @@ export const OFFICE_LAYOUT: number[][] = (() => {
     set(doorX, ry - 1, (doorX + ry - 1) % 2 === 0 ? 4 : 5);
     set(doorX + 1, ry - 1, (doorX + 1 + ry - 1) % 2 === 0 ? 4 : 5);
 
-    // Meeting room + Café: porta na parede esquerda (3 tiles, centro vertical)
-    if (room.label === "Meeting Room" || room.label === "Café") {
-      const doorY = ry + Math.floor(rh / 2);
-      set(rx - 1, doorY - 1, (rx - 1 + doorY - 1) % 2 === 0 ? 4 : 5);
-      set(rx - 1, doorY, (rx - 1 + doorY) % 2 === 0 ? 4 : 5);
-      set(rx - 1, doorY + 1, (rx - 1 + doorY + 1) % 2 === 0 ? 4 : 5);
-    }
+    // Door opening left wall (3 tiles, centro vertical)
+    const doorY = ry + Math.floor(rh / 2);
+    set(rx - 1, doorY - 1, (rx - 1 + doorY - 1) % 2 === 0 ? 4 : 5);
+    set(rx - 1, doorY, (rx - 1 + doorY) % 2 === 0 ? 4 : 5);
+    set(rx - 1, doorY + 1, (rx - 1 + doorY + 1) % 2 === 0 ? 4 : 5);
+
+    // Door opening right wall (3 tiles, centro vertical)
+    set(rx + rw, doorY - 1, (rx + rw + doorY - 1) % 2 === 0 ? 4 : 5);
+    set(rx + rw, doorY, (rx + rw + doorY) % 2 === 0 ? 4 : 5);
+    set(rx + rw, doorY + 1, (rx + rw + doorY + 1) % 2 === 0 ? 4 : 5);
   }
 
-  // Garden area — grama sem paredes (substitui hallway tiles)
+  // Garden area — grama sem paredes (área aberta no centro)
   for (let y = GARDEN.y; y < GARDEN.y + GARDEN.h && y < H - 1; y++) {
     for (let x = GARDEN.x; x < GARDEN.x + GARDEN.w && x < W - 1; x++) {
       set(x, y, (x + y) % 2 === 0 ? 8 : 9);
     }
   }
-  // Remove paredes na divisa entre hallway e jardim (lado esquerdo do jardim)
-  for (let y = GARDEN.y; y < GARDEN.y + GARDEN.h && y < H - 1; y++) {
-    const leftWall = GARDEN.x - 1;
-    if (leftWall > 0) {
-      const tile = layout[y]?.[leftWall];
-      if (tile === 1) set(leftWall, y, (leftWall + y) % 2 === 0 ? 4 : 5);
+
+  // Stone path — separação entre garden e café
+  for (let y = STONE_PATH.y; y < STONE_PATH.y + STONE_PATH.h && y < H - 1; y++) {
+    set(STONE_PATH.x, y, (STONE_PATH.x + y) % 2 === 0 ? 10 : 11);
+  }
+
+  // Café area — piso sem paredes (área aberta no centro)
+  for (let y = CAFE.y; y < CAFE.y + CAFE.h && y < H - 1; y++) {
+    for (let x = CAFE.x; x < CAFE.x + CAFE.w && x < W - 1; x++) {
+      set(x, y, (x + y) % 2 === 0 ? 6 : 7);
+    }
+  }
+
+  // Lounge — piso de pedra entre Room 8 e Room 9
+  for (let y = LOUNGE.y; y < LOUNGE.y + LOUNGE.h && y < H - 1; y++) {
+    for (let x = LOUNGE.x; x < LOUNGE.x + LOUNGE.w && x < W - 1; x++) {
+      set(x, y, (x + y) % 2 === 0 ? 10 : 11);
     }
   }
 
@@ -363,7 +414,7 @@ export const ROOM_FURNITURE: RoomFurniture[] = ROOMS.slice(0, 9).map((room, i) =
   coffee: { x: room.x + room.w - 3, y: room.y },
   plant: { x: room.x, y: room.y },
   rug: { x: room.x + 3, y: room.y + 4, w: 3, h: 1 },
-  bookshelf: { x: room.x, y: room.y + 3 },
+  bookshelf: { x: room.x, y: room.y + 1 },
   lamp: { x: room.x + room.w - 1, y: room.y + room.h - 1 },
 }));
 
@@ -384,10 +435,9 @@ export const STATIC_BLOCKED_TILES: { x: number; y: number }[] = (() => {
   }
 
   // Mesas do café (3 wide x 2 tall cada) + balcão (2x3)
-  const cafe = ROOMS[CAFE_ROOM_INDEX];
   const cafeTables = [
-    { x: cafe.x + 2, y: cafe.y + 1, w: 3, h: 2 },
-    { x: cafe.x + 7, y: cafe.y + 1, w: 3, h: 2 },
+    { x: CAFE.x + 2, y: CAFE.y + 4, w: 3, h: 2 },
+    { x: CAFE.x + 7, y: CAFE.y + 4, w: 3, h: 2 },
   ];
   for (const ct of cafeTables) {
     for (let y = ct.y; y < ct.y + ct.h; y++) {
@@ -397,8 +447,8 @@ export const STATIC_BLOCKED_TILES: { x: number; y: number }[] = (() => {
     }
   }
   // Balcão do café (2x3 no canto superior direito)
-  const barX = cafe.x + cafe.w - 3;
-  const barY = cafe.y;
+  const barX = CAFE.x + CAFE.w - 3;
+  const barY = CAFE.y;
   for (let y = barY; y < barY + 3; y++) {
     for (let x = barX; x < barX + 2; x++) {
       tiles.push({ x, y });
@@ -423,12 +473,21 @@ export const STATIC_BLOCKED_TILES: { x: number; y: number }[] = (() => {
     tiles.push({ x: t.x + 1, y: t.y + 1 });
   }
 
-  // Cachorro bloqueia seu tile
-  tiles.push(DOG_POSITION);
+  // Cachorro tem posicao dinamica — bloqueio tratado no game loop
+
+  // Lounge — bebedouro (topo) e banco (centro)
+  // Bebedouro: 1 tile no topo central
+  tiles.push({ x: LOUNGE.x + 1, y: LOUNGE.y + 1 });
+  // Banco: 3 tiles wide no centro
+  for (let x = LOUNGE.x; x < LOUNGE.x + LOUNGE.w; x++) {
+    tiles.push({ x, y: LOUNGE.y + 4 });
+  }
+  // Planta: 1 tile no fundo central
+  tiles.push({ x: LOUNGE.x + 1, y: LOUNGE.y + 6 });
 
   return tiles;
 })();
 
-// Overflow areas for unassigned characters (inside café room)
-export const COFFEE_AREA = { x: 40, y: 16, width: 3, height: 2 };
-export const BED_AREA = { x: 46, y: 16, width: 3, height: 2 };
+// Overflow areas for unassigned characters (inside café area)
+export const COFFEE_AREA = { x: CAFE.x + 1, y: CAFE.y + 4, width: 3, height: 2 };
+export const BED_AREA = { x: CAFE.x + 8, y: CAFE.y + 4, width: 3, height: 2 };

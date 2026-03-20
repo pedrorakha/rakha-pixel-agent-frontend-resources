@@ -411,7 +411,7 @@ export function MusicPlayer() {
       {!expanded && (
         <button
           onClick={() => { setExpanded(true); unlockAudio(); }}
-          className="fixed bottom-6 left-6 z-50 flex items-center gap-2 bg-pixel-surface border-2 border-pixel-panel hover:border-pixel-accent transition-colors cursor-pointer"
+          className="fixed bottom-16 left-6 z-50 flex items-center gap-2 bg-pixel-surface border-2 border-pixel-panel hover:border-pixel-accent transition-colors cursor-pointer"
           style={{ maxWidth: 280 }}
         >
           <div className="flex items-center gap-3 px-4 py-2.5 w-full">
@@ -437,7 +437,7 @@ export function MusicPlayer() {
 
       {/* Expanded */}
       {expanded && (
-        <div className="fixed bottom-4 left-4 right-4 sm:right-auto sm:left-6 sm:bottom-6 z-50 w-auto sm:w-[380px] max-h-[70vh] sm:max-h-[500px] flex flex-col bg-pixel-surface border-4 border-pixel-panel shadow-[4px_4px_0px_0px_rgba(0,0,0,0.5)]">
+        <div className="fixed bottom-16 left-4 right-4 sm:right-auto sm:left-6 sm:bottom-16 z-50 w-auto sm:w-[380px] max-h-[60vh] sm:max-h-[500px] flex flex-col bg-pixel-surface border-4 border-pixel-panel shadow-[4px_4px_0px_0px_rgba(0,0,0,0.5)]">
           <div className="flex items-center justify-between px-4 py-3 border-b-2 border-pixel-panel">
             <span className="font-pixel text-[13px] text-pixel-accent">&#9835; JUKEBOX</span>
             <button onClick={() => setExpanded(false)} className="font-pixel text-[11px] text-pixel-muted hover:text-pixel-accent transition-colors">[MINIMIZE]</button>
